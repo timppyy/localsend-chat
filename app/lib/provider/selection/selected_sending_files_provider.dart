@@ -30,6 +30,17 @@ class SelectedSendingFilesNotifier extends ReduxNotifier<List<CrossFile>> {
   List<CrossFile> init() => [];
 }
 
+class SetSelectionAction extends ReduxAction<SelectedSendingFilesNotifier, List<CrossFile>> {
+  final List<CrossFile> files;
+
+  SetSelectionAction(this.files);
+
+  @override
+  List<CrossFile> reduce() {
+    return List.unmodifiable(files);
+  }
+}
+
 /// Adds a message.
 class AddMessageAction extends ReduxAction<SelectedSendingFilesNotifier, List<CrossFile>> {
   final String message;

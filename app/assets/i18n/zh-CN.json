@@ -84,6 +84,21 @@
     "help": "请确保目标连接到同一个 Wi‑Fi 网络。",
     "placeItems": "列出要分享的项目。"
   },
+  "chatTab": {
+    "title": "聊天",
+    "chats": "聊天",
+    "nearbyDevices": "附近的设备",
+    "noNearbyDevices": "暂未发现附近设备。",
+    "noMessages": "还没有消息。",
+    "selectDevice": "选择一个设备开始聊天。",
+    "message": "消息",
+    "attachFile": "附加文件",
+    "send": "发送",
+    "file": "文件",
+    "allowTitle": "允许聊天？",
+    "allowContent": "{alias} 想给你发送聊天消息。\n\n{preview}",
+    "allow": "允许"
+  },
   "settingsTab": {
     "title": "设置",
     "general": {

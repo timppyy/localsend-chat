@@ -24,6 +24,7 @@ import 'package:localsend_app/pages/home_page.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/progress_page.dart';
 import 'package:localsend_app/pages/receive_page.dart';
+import 'package:localsend_app/provider/chat_provider.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/provider/favorites_provider.dart';
 import 'package:localsend_app/provider/http_provider.dart';
@@ -553,6 +554,18 @@ class ReceiveController {
               isMessage: false,
               fileSize: receivingFile.file.size,
               senderAlias: receiveState.senderAlias,
+              timestamp: DateTime.now().toUtc(),
+            ),
+          );
+      await server.ref
+          .redux(chatProvider)
+          .dispatchAsync(
+            AddIncomingFileMessageAction(
+              sender: receiveState.sender,
+              fileId: fileId,
+              fileName: receivingFile.desiredName!,
+              fileSize: receivingFile.file.size,
+              filePath: filePath,
               timestamp: DateTime.now().toUtc(),
             ),
           );

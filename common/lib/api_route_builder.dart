@@ -12,6 +12,8 @@ enum ApiRoute {
   show('show'),
   prepareDownload('prepare-download'),
   download('download'),
+  chatRequest('chat/request'),
+  chatMessage('chat/message'),
   ;
 
   const ApiRoute(String path, [String? legacy])

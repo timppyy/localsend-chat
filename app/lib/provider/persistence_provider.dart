@@ -8,6 +8,9 @@ import 'package:common/model/stored_security_context.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/gen/strings.g.dart';
+import 'package:localsend_app/model/persistence/chat_conversation.dart';
+import 'package:localsend_app/model/persistence/chat_message.dart';
+import 'package:localsend_app/model/persistence/chat_trusted_device.dart';
 import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/persistence/receive_history_entry.dart';
@@ -56,6 +59,11 @@ const _receiveHistory = 'ls_receive_history';
 
 // Favorites
 const _favorites = 'ls_favorites';
+
+// Chat
+const _chatTrustedDevices = 'ls_chat_trusted_devices';
+const _chatConversations = 'ls_chat_conversations';
+const _chatMessages = 'ls_chat_messages';
 
 // App Window Offset and Size info
 const _windowOffsetX = 'ls_window_offset_x';
@@ -265,6 +273,36 @@ class PersistenceService {
   Future<void> setFavorites(List<FavoriteDevice> entries) async {
     final favoritesRaw = entries.map((entry) => jsonEncode(entry.toJson())).toList();
     await _prefs.setStringList(_favorites, favoritesRaw);
+  }
+
+  List<ChatTrustedDevice> getChatTrustedDevices() {
+    final trustedRaw = _prefs.getStringList(_chatTrustedDevices) ?? [];
+    return trustedRaw.map((entry) => ChatTrustedDevice.fromJson(jsonDecode(entry))).toList();
+  }
+
+  Future<void> setChatTrustedDevices(List<ChatTrustedDevice> entries) async {
+    final trustedRaw = entries.map((entry) => jsonEncode(entry.toJson())).toList();
+    await _prefs.setStringList(_chatTrustedDevices, trustedRaw);
+  }
+
+  List<ChatConversation> getChatConversations() {
+    final conversationsRaw = _prefs.getStringList(_chatConversations) ?? [];
+    return conversationsRaw.map((entry) => ChatConversation.fromJson(jsonDecode(entry))).toList();
+  }
+
+  Future<void> setChatConversations(List<ChatConversation> entries) async {
+    final conversationsRaw = entries.map((entry) => jsonEncode(entry.toJson())).toList();
+    await _prefs.setStringList(_chatConversations, conversationsRaw);
+  }
+
+  List<ChatMessage> getChatMessages() {
+    final messagesRaw = _prefs.getStringList(_chatMessages) ?? [];
+    return messagesRaw.map((entry) => ChatMessage.fromJson(jsonDecode(entry))).toList();
+  }
+
+  Future<void> setChatMessages(List<ChatMessage> entries) async {
+    final messagesRaw = entries.map((entry) => jsonEncode(entry.toJson())).toList();
+    await _prefs.setStringList(_chatMessages, messagesRaw);
   }
 
   String getShowToken() {

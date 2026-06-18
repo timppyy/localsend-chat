@@ -84,6 +84,21 @@
     "help": "Please ensure that the desired target is also on the same Wi-Fi network.",
     "placeItems": "Place items to share."
   },
+  "chatTab": {
+    "title": "Chat",
+    "chats": "Chats",
+    "nearbyDevices": "Nearby devices",
+    "noNearbyDevices": "No nearby devices yet.",
+    "noMessages": "No messages yet.",
+    "selectDevice": "Select a device to start chatting.",
+    "message": "Message",
+    "attachFile": "Attach file",
+    "send": "Send",
+    "file": "File",
+    "allowTitle": "Allow chat?",
+    "allowContent": "{alias} wants to send you chat messages.\n\n{preview}",
+    "allow": "Allow"
+  },
   "settingsTab": {
     "title": "Settings",
     "general": {

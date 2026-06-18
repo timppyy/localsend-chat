@@ -227,6 +227,7 @@ class SendTab extends StatelessWidget {
                               isFavorite: favoriteEntry != null,
                               nameOverride: favoriteEntry?.alias,
                               onFavoriteTap: () async => await vm.onToggleFavorite(context, device),
+                              onChatTap: () => vm.onTapChat(device),
                               onTap: () async => await vm.onTapDevice(context, device),
                             ),
                     ),
@@ -561,6 +562,7 @@ class _MultiSendDeviceListTile extends StatelessWidget {
       isFavorite: isFavorite,
       nameOverride: nameOverride,
       onFavoriteTap: device.ip == null ? null : () async => await vm.onToggleFavorite(context, device),
+      onChatTap: () => vm.onTapChat(device),
       onTap: () async => await vm.onTapDeviceMultiSend(context, device),
     );
   }

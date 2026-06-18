@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/send_mode.dart';
+import 'package:localsend_app/pages/home_page.dart';
+import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/progress_page.dart';
 import 'package:localsend_app/pages/send_page.dart';
 import 'package:localsend_app/pages/web_send_page.dart';
+import 'package:localsend_app/provider/chat_provider.dart';
 import 'package:localsend_app/provider/favorites_provider.dart';
 import 'package:localsend_app/provider/local_ip_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
@@ -36,6 +39,7 @@ class SendTabVm {
   final Future<void> Function(BuildContext context, Device device) onToggleFavorite;
   final Future<void> Function(BuildContext context, Device device) onTapDevice;
   final Future<void> Function(BuildContext context, Device device) onTapDeviceMultiSend;
+  final void Function(Device device) onTapChat;
 
   const SendTabVm({
     required this.sendMode,
@@ -49,6 +53,7 @@ class SendTabVm {
     required this.onToggleFavorite,
     required this.onTapDevice,
     required this.onTapDeviceMultiSend,
+    required this.onTapChat,
   });
 }
 
@@ -190,6 +195,10 @@ final sendTabVmProvider = ViewProvider((ref) {
             files: files,
             background: true,
           );
+    },
+    onTapChat: (device) {
+      ref.redux(chatProvider).dispatch(SelectConversationAction(device.fingerprint));
+      ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(HomeTab.chat));
     },
   );
 });
