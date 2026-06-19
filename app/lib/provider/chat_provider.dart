@@ -92,10 +92,9 @@ class ChatService extends ReduxNotifier<ChatState> {
       request.write(jsonEncode(body));
       final response = await request.close();
       final responseBody = await utf8.decodeStream(response);
-      final decoded = responseBody.isEmpty ? <String, dynamic>{} : jsonDecode(responseBody) as Map<String, dynamic>;
       return ChatHttpResponse(
         statusCode: response.statusCode,
-        body: decoded,
+        body: _decodeChatResponseBody(response.statusCode, responseBody),
       );
     } finally {
       client.close(force: true);
@@ -377,7 +376,7 @@ class SendTextMessageAction extends AsyncReduxAction<ChatService, ChatState> {
         persistence: notifier._persistence,
         messageId: message.id,
         status: ChatMessageStatus.failed,
-        errorMessage: e.toString(),
+        errorMessage: _chatSendExceptionMessage(e),
       );
     }
 
@@ -430,6 +429,35 @@ class SendTextMessageAction extends AsyncReduxAction<ChatService, ChatState> {
         text: text,
         timestamp: timestamp,
       ).toJson(),
+    );
+  }
+}
+
+class DeleteChatMessageAction extends AsyncReduxAction<ChatService, ChatState> {
+  final String messageId;
+
+  DeleteChatMessageAction(this.messageId);
+
+  @override
+  Future<ChatState> reduce() async {
+    final message = state.messages.firstWhereOrNull((entry) => entry.id == messageId);
+    if (message == null) {
+      return state;
+    }
+
+    final messages = state.messages.where((entry) => entry.id != messageId).toList();
+    await notifier._persistence.setChatMessages(messages);
+
+    final conversations = _refreshConversationAfterDelete(
+      conversations: state.conversations,
+      messages: messages,
+      peerFingerprint: message.peerFingerprint,
+    );
+    await notifier._persistence.setChatConversations(conversations);
+
+    return state.copyWith(
+      messages: messages,
+      conversations: conversations,
     );
   }
 }
@@ -519,6 +547,82 @@ Future<ChatState> _persistMessageStatus({
   }).toList();
   await persistence.setChatMessages(messages);
   return state.copyWith(messages: messages);
+}
+
+Map<String, dynamic> _decodeChatResponseBody(int statusCode, String responseBody) {
+  if (responseBody.isEmpty) {
+    return <String, dynamic>{};
+  }
+
+  try {
+    final decoded = jsonDecode(responseBody);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+  } on FormatException {
+    // Fall through and surface a clean transport message instead of leaking the parser error into chat history.
+  }
+
+  final message = _chatHttpErrorMessage(statusCode, responseBody);
+  return message == null ? <String, dynamic>{} : {'message': message};
+}
+
+String _chatSendExceptionMessage(Object error) {
+  if (error is FormatException) {
+    return _chatHttpErrorMessage(null, error.source?.toString() ?? error.message) ?? 'Chat response was malformed.';
+  }
+  return error.toString();
+}
+
+String? _chatHttpErrorMessage(int? statusCode, String responseBody) {
+  final trimmed = responseBody.trim();
+  if (statusCode == HttpStatus.notFound || trimmed == 'Not found') {
+    return 'Chat is not available on this device.';
+  }
+  if (trimmed.isNotEmpty) {
+    return trimmed;
+  }
+  return statusCode == null ? null : 'HTTP $statusCode';
+}
+
+List<ChatConversation> _refreshConversationAfterDelete({
+  required List<ChatConversation> conversations,
+  required List<ChatMessage> messages,
+  required String peerFingerprint,
+}) {
+  final existing = conversations.firstWhereOrNull((entry) => entry.peerFingerprint == peerFingerprint);
+  if (existing == null) {
+    return conversations;
+  }
+
+  final latestMessage = messages
+      .where((message) => message.peerFingerprint == peerFingerprint)
+      .sorted((a, b) => b.timestamp.compareTo(a.timestamp))
+      .firstOrNull;
+  if (latestMessage == null) {
+    return conversations.where((entry) => entry.peerFingerprint != peerFingerprint).toList();
+  }
+
+  final updated = ChatConversation(
+    peerFingerprint: existing.peerFingerprint,
+    alias: existing.alias,
+    lastIp: existing.lastIp,
+    lastPort: existing.lastPort,
+    https: existing.https,
+    lastMessage: _conversationSummary(latestMessage),
+    updatedAt: latestMessage.timestamp,
+  );
+  return [
+    updated,
+    ...conversations.where((entry) => entry.peerFingerprint != peerFingerprint),
+  ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+}
+
+String _conversationSummary(ChatMessage message) {
+  if (message.kind == ChatMessageKind.file) {
+    return message.fileName ?? 'File';
+  }
+  return message.text ?? '';
 }
 
 List<ChatMessage> _limitMessages(List<ChatMessage> messages, String peerFingerprint) {

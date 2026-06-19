@@ -66,6 +66,24 @@ Primary goal: keep LocalSend's LAN discovery and peer-to-peer file transfer, the
 
 Use Flutter `3.38.10` as specified by `.fvmrc`.
 
+If `flutter` is not on `PATH`, use a repo-local ignored SDK:
+
+```powershell
+git clone --depth 1 --branch 3.38.10 https://github.com/flutter/flutter.git .fvm\flutter_sdk
+```
+
+For sandboxed or non-admin agent runs, keep SDK, Pub, and Dart tool state inside the repository's ignored `.fvm/` directory:
+
+```powershell
+$env:GIT_CONFIG_COUNT='1'
+$env:GIT_CONFIG_KEY_0='safe.directory'
+$env:GIT_CONFIG_VALUE_0='D:/Project/localsend-chat/.fvm/flutter_sdk'
+$env:PUB_CACHE='D:\Project\localsend-chat\.fvm\pub-cache'
+$env:APPDATA='D:\Project\localsend-chat\.fvm\appdata\Roaming'
+$env:LOCALAPPDATA='D:\Project\localsend-chat\.fvm\appdata\Local'
+$env:DART_SUPPRESS_ANALYTICS='true'
+```
+
 From `common/`:
 
 ```powershell
@@ -84,16 +102,77 @@ flutter analyze lib test\unit\provider\chat_persistence_test.dart test\unit\prov
 flutter build windows
 ```
 
+Use `D:\Project\localsend-chat\.fvm\flutter_sdk\bin\flutter.bat` and `D:\Project\localsend-chat\.fvm\flutter_sdk\bin\dart.bat` in the commands above when using the repo-local SDK.
+
+## Agent Build Runbook
+
+This is the verified flow from the final `features/localsend-chat` build pass:
+
+1. Confirm branch and worktree:
+   ```powershell
+   git status --short --branch
+   ```
+2. Install dependencies:
+   ```powershell
+   cd common
+   ..\.fvm\flutter_sdk\bin\flutter.bat pub get
+   cd ..\app
+   ..\.fvm\flutter_sdk\bin\flutter.bat pub get
+   ```
+3. Generate code:
+   ```powershell
+   cd ..\common
+   ..\.fvm\flutter_sdk\bin\dart.bat run build_runner build -d
+   cd ..\app
+   ..\.fvm\flutter_sdk\bin\dart.bat run slang
+   ..\.fvm\flutter_sdk\bin\dart.bat run build_runner build -d
+   ```
+4. Run targeted chat verification:
+   ```powershell
+   ..\.fvm\flutter_sdk\bin\flutter.bat test test/unit/util/api_route_builder_test.dart test/unit/provider/chat_persistence_test.dart test/unit/provider/chat_provider_test.dart
+   ..\.fvm\flutter_sdk\bin\flutter.bat analyze lib test/unit/provider/chat_persistence_test.dart test/unit/provider/chat_provider_test.dart test/unit/util/api_route_builder_test.dart
+   ```
+5. Run broader unit coverage:
+   ```powershell
+   ..\.fvm\flutter_sdk\bin\flutter.bat test test/unit
+   ```
+6. Build Windows:
+   ```powershell
+   ..\.fvm\flutter_sdk\bin\flutter.bat build windows
+   ```
+   Expected output:
+   ```text
+   Built build\windows\x64\runner\Release\localsend_app.exe
+   ```
+
+Windows-specific notes:
+
+- Flutter plugin builds require Windows Developer Mode or equivalent symlink privilege.
+- Visual Studio 2026 / MSVC v180 requires `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` for plugins that still include `<experimental/coroutine>`.
+- C++/WinRT users such as `gal_plugin` and `winrt_ext.cpp` need `runtimeobject.lib`.
+- `localsend_msix_helper.msix` is optional in this fork; CMake must not unconditionally install it when the file is absent.
+- Rust-backed plugins (`rhttp`, `rust_lib_localsend_app`) may need network access to `crates.io` on the first Windows build.
+- If `Couldn't resolve the package 'build_tool'` appears in `*_cargokit.vcxproj`, run `dart pub get` in the generated runner dirs under `app/build/windows/x64/plugins/*/cargokit_build/tool/`, then retry the build.
+
+Chat debugging and UX notes:
+
+- A chat bubble that shows `FormatException: Unexpected character ... Not found` means the sender tried to parse a plain-text HTTP error as JSON. The common cause is that the target device does not expose the chat route, for example an older/non-chat LocalSend build or a mismatched chat endpoint.
+- Keep transport/parser errors out of persisted chat text. Convert non-JSON HTTP responses into a short user-facing error such as `Chat is not available on this device.` before saving `ChatMessage.errorMessage`.
+- Message text should use `SelectableText` so users can select and copy partial text with the platform selection toolbar.
+- Each chat message bubble should keep a compact actions menu for whole-message copy and local message deletion.
+- Deleting a message is local history cleanup: remove it from persisted chat messages, then refresh the conversation summary from the latest remaining message or remove the conversation if no messages remain.
+
 ## Current Validation Notes
 
-- Chat-related tests have passed with Flutter 3.38.10.
-- Chat-related scoped analyze has passed.
+- Verified on this machine with Flutter 3.38.10 / Dart 3.10.9 and Visual Studio 2026.
+- `flutter test test/unit` passed: 73 tests.
+- Chat-related scoped analyze passed with no issues.
+- `flutter build windows` succeeded and produced `app/build/windows/x64/runner/Release/localsend_app.exe`.
 - Full `flutter analyze` may include unrelated `rust_builder/cargokit/build_tool` dependency noise if that subpackage has not resolved its own dependencies.
-- Windows build reached Flutter's Windows build flow and detected Visual Studio, but this machine hit a Flutter/Dart file decode issue while reading `app/windows/flutter/CMakeLists.txt`. Treat that as a local build-environment problem to resolve before claiming a final release exe.
 
 ## Git Hygiene
 
-- Do not commit local SDK/cache workaround directories such as `.codex-flutter-*`, `.codex-pub-cache`, or preview executables.
+- Do not commit local SDK/cache workaround directories such as `.fvm/flutter_sdk`, `.fvm/pub-cache`, `.fvm/appdata`, `.codex-flutter-*`, `.codex-pub-cache`, or preview executables.
 - Do not commit temporary dependency changes made only to work around GitHub TLS failures.
-- Avoid broad generated-file churn. Commit generated files only when the corresponding source changes require them.
+- Avoid broad generated-file churn. `slang` and `build_runner` may refresh many generated files because of tool-version formatting changes; commit generated files only when the corresponding source changes require them.
 - Keep `origin` as the fork target and avoid pushing to `upstream`.

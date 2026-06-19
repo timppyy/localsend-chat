@@ -1,5 +1,6 @@
 import 'package:common/model/device.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:localsend_app/model/persistence/chat_conversation.dart';
 import 'package:localsend_app/model/persistence/chat_message.dart';
 import 'package:localsend_app/pages/tabs/chat_tab_vm.dart';
@@ -163,7 +164,10 @@ class _ChatDetail extends StatelessWidget {
                   padding: const EdgeInsets.all(18),
                   itemCount: vm.messages.length,
                   itemBuilder: (context, index) {
-                    return _MessageBubble(message: vm.messages[index]);
+                    return _MessageBubble(
+                      message: vm.messages[index],
+                      onDelete: vm.onDeleteMessage,
+                    );
                   },
                 ),
         ),
@@ -228,14 +232,19 @@ class _ChatHeader extends StatelessWidget {
 
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
+  final Future<void> Function(String messageId) onDelete;
 
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final outgoing = message.direction == ChatMessageDirection.outgoing;
     final color = outgoing ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest;
     final textColor = outgoing ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurfaceVariant;
+    final content = _messageContent(message);
 
     return Align(
       alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
@@ -253,11 +262,29 @@ class _MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(message.kind == ChatMessageKind.file ? message.fileName ?? 'File' : message.text ?? ''),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        content,
+                        style: TextStyle(color: textColor),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    _MessageActionMenu(
+                      message: message,
+                      onDelete: onDelete,
+                    ),
+                  ],
+                ),
                 if (message.kind == ChatMessageKind.file && message.fileSize != null)
                   Text('${message.fileSize} bytes', style: Theme.of(context).textTheme.bodySmall),
                 if (message.status == ChatMessageStatus.failed || message.status == ChatMessageStatus.declined)
-                  Text(message.errorMessage ?? message.status.name, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  SelectableText(
+                    message.errorMessage ?? message.status.name,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
               ],
             ),
           ),
@@ -265,6 +292,75 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _MessageAction {
+  copy,
+  delete,
+}
+
+class _MessageActionMenu extends StatelessWidget {
+  final ChatMessage message;
+  final Future<void> Function(String messageId) onDelete;
+
+  const _MessageActionMenu({
+    required this.message,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_MessageAction>(
+      tooltip: 'Message actions',
+      padding: EdgeInsets.zero,
+      icon: const Icon(Icons.more_vert, size: 18),
+      onSelected: (action) async {
+        switch (action) {
+          case _MessageAction.copy:
+            await Clipboard.setData(ClipboardData(text: _messageContent(message)));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Copied to clipboard')),
+              );
+            }
+          case _MessageAction.delete:
+            await onDelete(message.id);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Message deleted')),
+              );
+            }
+        }
+      },
+      itemBuilder: (context) {
+        return const [
+          PopupMenuItem(
+            value: _MessageAction.copy,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.copy),
+              title: Text('Copy'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _MessageAction.delete,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.delete_outline),
+              title: Text('Delete'),
+            ),
+          ),
+        ];
+      },
+    );
+  }
+}
+
+String _messageContent(ChatMessage message) {
+  if (message.kind == ChatMessageKind.file) {
+    return message.fileName ?? 'File';
+  }
+  return message.text ?? '';
 }
 
 class _Composer extends StatelessWidget {

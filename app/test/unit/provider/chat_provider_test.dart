@@ -3,6 +3,7 @@ import 'package:common/constants.dart';
 import 'package:common/model/device.dart';
 import 'package:common/model/dto/chat_peer_dto.dart';
 import 'package:common/model/dto/multicast_dto.dart';
+import 'package:localsend_app/model/persistence/chat_conversation.dart';
 import 'package:localsend_app/model/persistence/chat_message.dart';
 import 'package:localsend_app/model/persistence/chat_trusted_device.dart';
 import 'package:localsend_app/provider/chat_provider.dart';
@@ -264,6 +265,66 @@ void main() {
     expect(service.state.messages.single.status, ChatMessageStatus.declined);
     expect(service.state.messages.single.errorMessage, 'Chat request declined by recipient');
   });
+
+  test('non-json send error is stored as a readable chat error', () async {
+    final service = ReduxNotifier.test(
+      redux: ChatService(
+        persistence: persistenceService,
+        findDevice: (_) => _device(fingerprint: 'fp1'),
+        localDevice: () => _device(fingerprint: 'self', alias: 'Me'),
+        postJson: ({required target, required route, required body}) async {
+          throw const FormatException('Unexpected character', 'Not found', 0);
+        },
+      ),
+    );
+
+    await service.dispatchAsync(
+      SendTextMessageAction(
+        peerFingerprint: 'fp1',
+        text: 'hello',
+      ),
+    );
+
+    expect(service.state.messages.single.status, ChatMessageStatus.failed);
+    expect(service.state.messages.single.errorMessage, isNot(contains('FormatException')));
+    expect(service.state.messages.single.errorMessage, 'Chat is not available on this device.');
+  });
+
+  test('deletes a local chat message and refreshes conversation summary', () async {
+    final older = _message(
+      id: 'message-1',
+      text: 'first',
+      timestamp: DateTime.utc(2026, 6, 18, 11),
+    );
+    final newer = _message(
+      id: 'message-2',
+      text: 'second',
+      timestamp: DateTime.utc(2026, 6, 18, 12),
+    );
+    when(persistenceService.getChatMessages()).thenReturn([older, newer]);
+    when(persistenceService.getChatConversations()).thenReturn([
+      ChatConversation(
+        peerFingerprint: 'fp1',
+        alias: 'Office PC',
+        lastIp: '192.168.1.42',
+        lastPort: 53317,
+        https: false,
+        lastMessage: 'second',
+        updatedAt: newer.timestamp,
+      ),
+    ]);
+    final service = ReduxNotifier.test(
+      redux: ChatService(persistence: persistenceService),
+    );
+
+    await service.dispatchAsync(DeleteChatMessageAction('message-2'));
+
+    expect(service.state.messages, [older]);
+    expect(service.state.conversations.single.lastMessage, 'first');
+    expect(service.state.conversations.single.updatedAt, older.timestamp);
+    verify(persistenceService.setChatMessages([older]));
+    verify(persistenceService.setChatConversations(service.state.conversations));
+  });
 }
 
 ChatTrustedDevice _trustedDevice(String fingerprint, {required String token}) {
@@ -296,5 +357,25 @@ Device _device({
     deviceType: DeviceType.desktop,
     download: false,
     discoveryMethods: {HttpDiscovery(ip: '192.168.1.42')},
+  );
+}
+
+ChatMessage _message({
+  required String id,
+  required String text,
+  required DateTime timestamp,
+}) {
+  return ChatMessage(
+    id: id,
+    peerFingerprint: 'fp1',
+    direction: ChatMessageDirection.outgoing,
+    kind: ChatMessageKind.text,
+    status: ChatMessageStatus.sent,
+    text: text,
+    fileName: null,
+    fileSize: null,
+    filePath: null,
+    errorMessage: null,
+    timestamp: timestamp,
   );
 }

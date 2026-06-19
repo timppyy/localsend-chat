@@ -21,6 +21,7 @@ class ChatTabVm {
   final void Function(String fingerprint) onSelectConversation;
   final Future<void> Function(String text) onSendText;
   final Future<void> Function(BuildContext context) onSendFiles;
+  final Future<void> Function(String messageId) onDeleteMessage;
 
   const ChatTabVm({
     required this.conversations,
@@ -32,6 +33,7 @@ class ChatTabVm {
     required this.onSelectConversation,
     required this.onSendText,
     required this.onSendFiles,
+    required this.onDeleteMessage,
   });
 }
 
@@ -113,6 +115,9 @@ final chatTabVmProvider = ViewProvider((ref) {
       } finally {
         ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(previousSelection));
       }
+    },
+    onDeleteMessage: (messageId) async {
+      await ref.redux(chatProvider).dispatchAsync(DeleteChatMessageAction(messageId));
     },
   );
 });
