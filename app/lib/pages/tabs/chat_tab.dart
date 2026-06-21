@@ -1,10 +1,21 @@
+import 'dart:io';
+
 import 'package:common/model/device.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/persistence/chat_conversation.dart';
 import 'package:localsend_app/model/persistence/chat_message.dart';
+import 'package:localsend_app/pages/tabs/chat_composer.dart';
 import 'package:localsend_app/pages/tabs/chat_tab_vm.dart';
+import 'package:localsend_app/util/chat_attachment_helper.dart';
+import 'package:localsend_app/util/chat_clipboard_helper.dart';
+import 'package:localsend_app/util/file_size_helper.dart';
+import 'package:localsend_app/util/file_type_ext.dart';
+import 'package:localsend_app/util/native/open_file.dart';
+import 'package:localsend_app/util/native/open_folder.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
+import 'package:path/path.dart' as path;
 import 'package:refena_flutter/refena_flutter.dart';
 
 class ChatTab extends StatefulWidget {
@@ -16,6 +27,7 @@ class ChatTab extends StatefulWidget {
 
 class _ChatTabState extends State<ChatTab> {
   final _controller = TextEditingController();
+  final _draftAttachments = <CrossFile>[];
 
   @override
   void dispose() {
@@ -34,6 +46,10 @@ class _ChatTabState extends State<ChatTab> {
               return _ChatDetail(
                 vm: vm,
                 controller: _controller,
+                draftAttachments: _draftAttachments,
+                onAddAttachments: _addDraftAttachments,
+                onRemoveAttachment: _removeDraftAttachment,
+                onClearAttachments: _clearDraftAttachments,
               );
             }
 
@@ -48,6 +64,10 @@ class _ChatTabState extends State<ChatTab> {
                   child: _ChatDetail(
                     vm: vm,
                     controller: _controller,
+                    draftAttachments: _draftAttachments,
+                    onAddAttachments: _addDraftAttachments,
+                    onRemoveAttachment: _removeDraftAttachment,
+                    onClearAttachments: _clearDraftAttachments,
                   ),
                 ),
               ],
@@ -56,6 +76,31 @@ class _ChatTabState extends State<ChatTab> {
         );
       },
     );
+  }
+
+  void _addDraftAttachments(List<CrossFile> files) {
+    if (files.isEmpty) {
+      return;
+    }
+    setState(() {
+      _draftAttachments.addAll(files);
+    });
+  }
+
+  void _removeDraftAttachment(int index) {
+    if (index < 0 || index >= _draftAttachments.length) {
+      return;
+    }
+    setState(() {
+      _draftAttachments.removeAt(index);
+    });
+  }
+
+  void _clearDraftAttachments() {
+    if (_draftAttachments.isEmpty) {
+      return;
+    }
+    setState(_draftAttachments.clear);
   }
 }
 
@@ -93,9 +138,9 @@ class _ConversationPane extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
               child: Text('Nearby devices'),
             ),
-            ...vm.nearbyDevices
-                .where((device) => vm.conversations.every((conversation) => conversation.peerFingerprint != device.fingerprint))
-                .map((device) {
+            ...vm.nearbyDevices.where((device) => vm.conversations.every((conversation) => conversation.peerFingerprint != device.fingerprint)).map((
+              device,
+            ) {
               return _ConversationTile(
                 selected: vm.selectedFingerprint == device.fingerprint,
                 title: device.alias,
@@ -138,10 +183,18 @@ class _ConversationTile extends StatelessWidget {
 class _ChatDetail extends StatelessWidget {
   final ChatTabVm vm;
   final TextEditingController controller;
+  final List<CrossFile> draftAttachments;
+  final void Function(List<CrossFile> files) onAddAttachments;
+  final void Function(int index) onRemoveAttachment;
+  final VoidCallback onClearAttachments;
 
   const _ChatDetail({
     required this.vm,
     required this.controller,
+    required this.draftAttachments,
+    required this.onAddAttachments,
+    required this.onRemoveAttachment,
+    required this.onClearAttachments,
   });
 
   @override
@@ -171,14 +224,32 @@ class _ChatDetail extends StatelessWidget {
                   },
                 ),
         ),
-        _Composer(
+        ChatComposer(
           controller: controller,
-          onAttach: () async => await vm.onSendFiles(context),
+          attachments: draftAttachments,
+          onAttach: () async {
+            final files = await vm.onPickFiles(context);
+            onAddAttachments(files);
+          },
+          onPasteFromClipboard: () async {
+            final payload = await vm.onPasteFromClipboard();
+            if (!context.mounted) {
+              return;
+            }
+            _applyClipboardPayload(context, payload);
+          },
           onSend: () async {
             final text = controller.text;
+            final files = List<CrossFile>.of(draftAttachments);
+            if (text.trim().isEmpty && files.isEmpty) {
+              return;
+            }
             controller.clear();
+            onClearAttachments();
             await vm.onSendText(text);
+            await vm.onSendFiles(files);
           },
+          onRemoveAttachment: onRemoveAttachment,
         ),
       ],
     );
@@ -186,6 +257,34 @@ class _ChatDetail extends StatelessWidget {
 
   String _title(ChatConversation? conversation, Device? device) {
     return conversation?.alias ?? device?.alias ?? 'Chat';
+  }
+
+  void _applyClipboardPayload(BuildContext context, ChatClipboardPayload payload) {
+    if (payload.files.isNotEmpty) {
+      onAddAttachments(payload.files);
+    }
+
+    final text = payload.text;
+    if (text != null && text.isNotEmpty) {
+      final value = controller.value;
+      final selection = value.selection;
+      final start = selection.isValid ? selection.start.clamp(0, value.text.length).toInt() : value.text.length;
+      final end = selection.isValid ? selection.end.clamp(0, value.text.length).toInt() : value.text.length;
+      final replaceStart = start < end ? start : end;
+      final replaceEnd = start < end ? end : start;
+      final nextText = value.text.replaceRange(replaceStart, replaceEnd, text);
+      controller.value = value.copyWith(
+        text: nextText,
+        selection: TextSelection.collapsed(offset: replaceStart + text.length),
+        composing: TextRange.empty,
+      );
+    }
+
+    if (payload.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No supported clipboard content.')),
+      );
+    }
   }
 }
 
@@ -244,7 +343,6 @@ class _MessageBubble extends StatelessWidget {
     final outgoing = message.direction == ChatMessageDirection.outgoing;
     final color = outgoing ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest;
     final textColor = outgoing ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurfaceVariant;
-    final content = _messageContent(message);
 
     return Align(
       alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
@@ -262,24 +360,29 @@ class _MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        content,
-                        style: TextStyle(color: textColor),
+                if (message.kind == ChatMessageKind.file)
+                  _AttachmentBubbleContent(
+                    message: message,
+                    textColor: textColor,
+                    onDelete: onDelete,
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SelectableText(
+                          _messageContent(message),
+                          style: TextStyle(color: textColor),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    _MessageActionMenu(
-                      message: message,
-                      onDelete: onDelete,
-                    ),
-                  ],
-                ),
-                if (message.kind == ChatMessageKind.file && message.fileSize != null)
-                  Text('${message.fileSize} bytes', style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(width: 6),
+                      _MessageActionMenu(
+                        message: message,
+                        onDelete: onDelete,
+                      ),
+                    ],
+                  ),
                 if (message.status == ChatMessageStatus.failed || message.status == ChatMessageStatus.declined)
                   SelectableText(
                     message.errorMessage ?? message.status.name,
@@ -296,6 +399,8 @@ class _MessageBubble extends StatelessWidget {
 
 enum _MessageAction {
   copy,
+  open,
+  showInFolder,
   delete,
 }
 
@@ -323,6 +428,10 @@ class _MessageActionMenu extends StatelessWidget {
                 const SnackBar(content: Text('Copied to clipboard')),
               );
             }
+          case _MessageAction.open:
+            await _openAttachment(context, message);
+          case _MessageAction.showInFolder:
+            await _showAttachmentInFolder(context, message);
           case _MessageAction.delete:
             await onDelete(message.id);
             if (context.mounted) {
@@ -333,8 +442,8 @@ class _MessageActionMenu extends StatelessWidget {
         }
       },
       itemBuilder: (context) {
-        return const [
-          PopupMenuItem(
+        return [
+          const PopupMenuItem(
             value: _MessageAction.copy,
             child: ListTile(
               dense: true,
@@ -342,7 +451,25 @@ class _MessageActionMenu extends StatelessWidget {
               title: Text('Copy'),
             ),
           ),
-          PopupMenuItem(
+          if (message.kind == ChatMessageKind.file)
+            const PopupMenuItem(
+              value: _MessageAction.open,
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.open_in_new),
+                title: Text('Open'),
+              ),
+            ),
+          if (message.kind == ChatMessageKind.file && _canShowInFolder(message))
+            const PopupMenuItem(
+              value: _MessageAction.showInFolder,
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.folder_open),
+                title: Text('Show in folder'),
+              ),
+            ),
+          const PopupMenuItem(
             value: _MessageAction.delete,
             child: ListTile(
               dense: true,
@@ -356,68 +483,235 @@ class _MessageActionMenu extends StatelessWidget {
   }
 }
 
-String _messageContent(ChatMessage message) {
-  if (message.kind == ChatMessageKind.file) {
-    return message.fileName ?? 'File';
-  }
-  return message.text ?? '';
-}
+class _AttachmentBubbleContent extends StatelessWidget {
+  final ChatMessage message;
+  final Color textColor;
+  final Future<void> Function(String messageId) onDelete;
 
-class _Composer extends StatelessWidget {
-  final TextEditingController controller;
-  final Future<void> Function() onAttach;
-  final Future<void> Function() onSend;
-
-  const _Composer({
-    required this.controller,
-    required this.onAttach,
-    required this.onSend,
+  const _AttachmentBubbleContent({
+    required this.message,
+    required this.textColor,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-      ),
-      child: Row(
+    final canPreview = _hasPreviewableLocalImage(message);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: canPreview ? null : () async => await _openAttachment(context, message),
+      onDoubleTap: () async {
+        if (canPreview) {
+          await _showImagePreview(context, message);
+        } else {
+          await _openAttachment(context, message);
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            tooltip: 'Attach file',
-            onPressed: () async {
-              await onAttach();
-            },
-            icon: const Icon(Icons.attach_file),
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Message',
-                border: OutlineInputBorder(),
-                isDense: true,
+          if (canPreview) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.file(
+                File(message.filePath!),
+                width: 360,
+                height: 220,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _FileAttachmentRow(
+                    message: message,
+                    textColor: textColor,
+                    onDelete: onDelete,
+                  );
+                },
               ),
-              onSubmitted: (_) async {
-                await onSend();
-              },
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            tooltip: 'Send',
-            onPressed: () async {
-              await onSend();
-            },
-            icon: const Icon(Icons.send),
-          ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    chatAttachmentName(message),
+                    style: TextStyle(color: textColor),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _MessageActionMenu(
+                  message: message,
+                  onDelete: onDelete,
+                ),
+              ],
+            ),
+            if (message.fileSize != null)
+              Text(
+                message.fileSize!.asReadableFileSize,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: textColor.withValues(alpha: 0.78)),
+              ),
+          ] else
+            _FileAttachmentRow(
+              message: message,
+              textColor: textColor,
+              onDelete: onDelete,
+            ),
         ],
       ),
     );
   }
+}
+
+class _FileAttachmentRow extends StatelessWidget {
+  final ChatMessage message;
+  final Color textColor;
+  final Future<void> Function(String messageId) onDelete;
+
+  const _FileAttachmentRow({
+    required this.message,
+    required this.textColor,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fileType = chatAttachmentType(message);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(fileType.icon, color: textColor, size: 32),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(
+                chatAttachmentName(message),
+                style: TextStyle(color: textColor),
+              ),
+              if (message.fileSize != null)
+                Text(
+                  message.fileSize!.asReadableFileSize,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: textColor.withValues(alpha: 0.78)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        _MessageActionMenu(
+          message: message,
+          onDelete: onDelete,
+        ),
+      ],
+    );
+  }
+}
+
+String _messageContent(ChatMessage message) {
+  if (message.kind == ChatMessageKind.file) {
+    return chatAttachmentName(message);
+  }
+  return message.text ?? '';
+}
+
+bool _hasPreviewableLocalImage(ChatMessage message) {
+  final filePath = message.filePath;
+  return canPreviewChatImage(message) && filePath != null && !filePath.startsWith('content://') && File(filePath).existsSync();
+}
+
+bool _canShowInFolder(ChatMessage message) {
+  final filePath = message.filePath;
+  return filePath != null && !filePath.startsWith('content://') && filePath.trim().isNotEmpty;
+}
+
+Future<void> _openAttachment(BuildContext context, ChatMessage message) async {
+  final filePath = message.filePath;
+  if (filePath == null || filePath.trim().isEmpty) {
+    _showAttachmentSnackBar(context, 'File path is not available.');
+    return;
+  }
+  if (!filePath.startsWith('content://') && !File(filePath).existsSync()) {
+    _showAttachmentSnackBar(context, 'File not found.');
+    return;
+  }
+
+  await openFile(context, chatAttachmentType(message), filePath);
+}
+
+Future<void> _showAttachmentInFolder(BuildContext context, ChatMessage message) async {
+  final filePath = message.filePath;
+  if (filePath == null || filePath.trim().isEmpty) {
+    _showAttachmentSnackBar(context, 'File path is not available.');
+    return;
+  }
+  final file = File(filePath);
+  if (!file.existsSync()) {
+    _showAttachmentSnackBar(context, 'File not found.');
+    return;
+  }
+
+  await openFolder(
+    folderPath: file.parent.path,
+    fileName: path.basename(filePath),
+  );
+}
+
+Future<void> _showImagePreview(BuildContext context, ChatMessage message) async {
+  final filePath = message.filePath;
+  if (filePath == null || !File(filePath).existsSync()) {
+    _showAttachmentSnackBar(context, 'File not found.');
+    return;
+  }
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      final size = MediaQuery.of(context).size;
+      return Dialog(
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: size.width * 0.86,
+          height: size.height * 0.86,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: InteractiveViewer(
+                    minScale: 0.6,
+                    maxScale: 5,
+                    child: Center(
+                      child: Image.file(
+                        File(filePath),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filledTonal(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+void _showAttachmentSnackBar(BuildContext context, String message) {
+  if (!context.mounted) {
+    return;
+  }
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message)),
+  );
 }

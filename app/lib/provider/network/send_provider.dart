@@ -55,7 +55,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
   /// Starts a session.
   /// If [background] is true, then the session closes itself on success and no pages will be open
   /// If [background] is false, then this method will open pages by itself and waits for user input to close the session.
-  Future<void> startSession({
+  Future<SendSessionResult> startSession({
     required Device target,
     required List<CrossFile> files,
     required bool background,
@@ -181,7 +181,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                   status: SessionStatus.canceledBySender,
                 ),
               );
-              return;
+              return _sessionResult(sessionId, status: SessionStatus.canceledBySender);
             }
             break;
           case 403:
@@ -191,7 +191,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                 status: SessionStatus.declined,
               ),
             );
-            return;
+            return _sessionResult(sessionId, status: SessionStatus.declined);
           case 409:
             state = state.updateSession(
               sessionId: sessionId,
@@ -199,7 +199,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                 status: SessionStatus.recipientBusy,
               ),
             );
-            return;
+            return _sessionResult(sessionId, status: SessionStatus.recipientBusy);
           case 429:
             state = state.updateSession(
               sessionId: sessionId,
@@ -207,7 +207,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                 status: SessionStatus.tooManyAttempts,
               ),
             );
-            return;
+            return _sessionResult(sessionId, status: SessionStatus.tooManyAttempts);
           default:
             state = state.updateSession(
               sessionId: sessionId,
@@ -216,7 +216,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
                 errorMessage: e.humanErrorMessage,
               ),
             );
-            return;
+            return _sessionResult(sessionId, status: SessionStatus.finishedWithErrors);
         }
       } catch (e) {
         state = state.updateSession(
@@ -226,12 +226,12 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
             errorMessage: e.humanErrorMessage,
           ),
         );
-        return;
+        return _sessionResult(sessionId, status: SessionStatus.finishedWithErrors);
       }
     } while (invalidPin);
 
     if (response == null) {
-      return;
+      return _sessionResult(sessionId);
     }
 
     final Map<String, String> fileMap;
@@ -242,12 +242,11 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
     } else {
       try {
         fileMap = response.response!.files;
-        final sessionId = response.response!.sessionId;
-        state = state.updateSession(
-          sessionId: sessionId,
-          state: (s) => s?.copyWith(
-            remoteSessionId: sessionId,
-          ),
+        final remoteSessionId = response.response!.sessionId;
+        state = applyRemoteSessionIdForUpload(
+          state,
+          localSessionId: sessionId,
+          remoteSessionId: remoteSessionId,
         );
       } catch (e) {
         state = state.updateSession(
@@ -257,7 +256,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
             errorMessage: e.humanErrorMessage,
           ),
         );
-        return;
+        return _sessionResult(sessionId, status: SessionStatus.finishedWithErrors);
       }
     }
 
@@ -276,7 +275,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       }
 
       closeSession(sessionId);
-      return;
+      return _resultFromState(requestState.copyWith(status: SessionStatus.finished));
     }
 
     final sendingFiles = {
@@ -308,10 +307,10 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       ),
     );
 
-    await _sendLoop(ref, sessionId, target, sendingFiles);
+    return await _sendLoop(ref, sessionId, target, sendingFiles);
   }
 
-  Future<void> _sendLoop(Ref ref, String sessionId, Device target, Map<String, SendingFile> files) async {
+  Future<SendSessionResult> _sendLoop(Ref ref, String sessionId, Device target, Map<String, SendingFile> files) async {
     state = state.updateSession(
       sessionId: sessionId,
       state: (s) => s?.copyWith(startTime: DateTime.now().millisecondsSinceEpoch),
@@ -343,23 +342,31 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
 
     await Future.wait(futures);
 
-    _finish(sessionId: sessionId);
+    return _finish(sessionId: sessionId);
   }
 
-  void _finish({required String sessionId}) {
+  SendSessionResult _finish({required String sessionId}) {
     final sessionState = state[sessionId];
     if (sessionState == null) {
-      return;
+      return SendSessionResult(
+        sessionId: sessionId,
+        status: SessionStatus.finishedWithErrors,
+        files: const {},
+        errorMessage: 'Send session was not found.',
+      );
     }
 
     if (state[sessionId]!.status != SessionStatus.sending) {
       _logger.info('Transfer was canceled.');
+      return _resultFromState(sessionState);
     } else {
       final hasError = sessionState.files.values.any((file) => file.status == FileStatus.failed);
       if (!hasError && sessionState.background == true) {
+        final result = _resultFromState(sessionState.copyWith(status: SessionStatus.finished));
         // close session because everything is fine and it is in background
         closeSession(sessionId);
         _logger.info('Transfer finished and session removed.');
+        return result;
       } else {
         // keep session alive when there are errors or currently in foreground
         state = state.updateSession(
@@ -375,6 +382,7 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
         } else {
           _logger.info('Transfer finished successfully.');
         }
+        return _sessionResult(sessionId);
       }
     }
   }
@@ -593,6 +601,67 @@ class SendNotifier extends Notifier<Map<String, SendSessionState>> {
       state: (s) => s?.copyWith(background: background),
     );
   }
+
+  SendSessionResult _sessionResult(String sessionId, {SessionStatus? status}) {
+    final sessionState = state[sessionId];
+    if (sessionState == null) {
+      return SendSessionResult(
+        sessionId: sessionId,
+        status: status ?? SessionStatus.finishedWithErrors,
+        files: const {},
+        errorMessage: 'Send session was not found.',
+      );
+    }
+    return _resultFromState(
+      status == null ? sessionState : sessionState.copyWith(status: status),
+    );
+  }
+}
+
+class SendSessionResult {
+  final String sessionId;
+  final SessionStatus status;
+  final Map<String, SendingFile> files;
+  final String? errorMessage;
+
+  const SendSessionResult({
+    required this.sessionId,
+    required this.status,
+    required this.files,
+    required this.errorMessage,
+  });
+
+  bool get hasError => status != SessionStatus.finished || files.values.any((file) => file.status == FileStatus.failed);
+
+  String? get firstErrorMessage {
+    for (final file in files.values) {
+      final errorMessage = file.errorMessage;
+      if (errorMessage != null && errorMessage.isNotEmpty) {
+        return errorMessage;
+      }
+    }
+    return errorMessage;
+  }
+}
+
+SendSessionResult _resultFromState(SendSessionState state) {
+  return SendSessionResult(
+    sessionId: state.sessionId,
+    status: state.status,
+    files: state.files,
+    errorMessage: state.errorMessage,
+  );
+}
+
+Map<String, SendSessionState> applyRemoteSessionIdForUpload(
+  Map<String, SendSessionState> state, {
+  required String localSessionId,
+  required String remoteSessionId,
+}) {
+  return state.updateSession(
+    sessionId: localSessionId,
+    state: (s) => s?.copyWith(remoteSessionId: remoteSessionId),
+  );
 }
 
 extension on Map<String, SendSessionState> {

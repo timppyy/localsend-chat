@@ -1,13 +1,17 @@
 import 'package:collection/collection.dart';
 import 'package:common/constants.dart';
 import 'package:common/model/device.dart';
+import 'package:common/model/file_status.dart';
+import 'package:common/model/session_status.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/model/persistence/chat_conversation.dart';
 import 'package:localsend_app/model/persistence/chat_message.dart';
 import 'package:localsend_app/provider/chat_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
+import 'package:localsend_app/util/chat_clipboard_helper.dart';
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
@@ -20,7 +24,9 @@ class ChatTabVm {
   final List<ChatMessage> messages;
   final void Function(String fingerprint) onSelectConversation;
   final Future<void> Function(String text) onSendText;
-  final Future<void> Function(BuildContext context) onSendFiles;
+  final Future<List<CrossFile>> Function(BuildContext context) onPickFiles;
+  final Future<ChatClipboardPayload> Function() onPasteFromClipboard;
+  final Future<void> Function(List<CrossFile> files) onSendFiles;
   final Future<void> Function(String messageId) onDeleteMessage;
 
   const ChatTabVm({
@@ -32,6 +38,8 @@ class ChatTabVm {
     required this.messages,
     required this.onSelectConversation,
     required this.onSendText,
+    required this.onPickFiles,
+    required this.onPasteFromClipboard,
     required this.onSendFiles,
     required this.onDeleteMessage,
   });
@@ -49,7 +57,7 @@ final chatTabVmProvider = ViewProvider((ref) {
   final messages = selectedFingerprint == null
       ? <ChatMessage>[]
       : (chat.messages.where((message) => message.peerFingerprint == selectedFingerprint).toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp)));
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)));
 
   return ChatTabVm(
     conversations: chat.conversations,
@@ -74,46 +82,49 @@ final chatTabVmProvider = ViewProvider((ref) {
             ),
           );
     },
-    onSendFiles: (context) async {
+    onPickFiles: (context) async {
       if (selectedFingerprint == null) {
+        return const [];
+      }
+      return await _collectChatAttachments(ref, () async {
+        await _pickChatAttachment(context, ref);
+      });
+    },
+    onPasteFromClipboard: () async {
+      return await readChatClipboard();
+    },
+    onSendFiles: (files) async {
+      if (selectedFingerprint == null || files.isEmpty) {
         return;
       }
       final target = selectedTarget;
-      final previousSelection = List.of(ref.read(selectedSendingFilesProvider));
-      ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(const []));
-      try {
-        await _pickChatAttachment(context, ref);
-        final files = ref.read(selectedSendingFilesProvider);
-        if (files.isEmpty) {
-          return;
-        }
-        Object? sendError;
-        if (target != null) {
-          try {
-            await ref.notifier(sendProvider).startSession(
-                  target: target,
-                  files: files,
-                  background: false,
-                );
-          } catch (e) {
-            sendError = e;
-          }
-        }
-        for (final file in files) {
-          await ref
-              .redux(chatProvider)
-              .dispatchAsync(
-                AddOutgoingFileMessageAction(
-                  peerFingerprint: selectedFingerprint,
-                  fileName: file.name,
-                  fileSize: file.size,
-                  filePath: file.path,
-                  errorMessage: sendError?.toString(),
-                ),
+      Object? sendError;
+      SendSessionResult? result;
+      if (target != null) {
+        try {
+          result = await ref
+              .notifier(sendProvider)
+              .startSession(
+                target: target,
+                files: files,
+                background: true,
               );
+        } catch (e) {
+          sendError = e;
         }
-      } finally {
-        ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(previousSelection));
+      }
+      for (final file in files) {
+        await ref
+            .redux(chatProvider)
+            .dispatchAsync(
+              AddOutgoingFileMessageAction(
+                peerFingerprint: selectedFingerprint,
+                fileName: file.name,
+                fileSize: file.size,
+                filePath: file.path,
+                errorMessage: sendError == null ? _fileTransferError(result, file) : _cleanFileTransferError(sendError.toString()),
+              ),
+            );
       }
     },
     onDeleteMessage: (messageId) async {
@@ -149,6 +160,46 @@ Future<void> _pickChatAttachment(BuildContext context, Ref ref) async {
   }
 
   await ref.global.dispatchAsync(PickFileAction(option: option, context: context));
+}
+
+Future<List<CrossFile>> _collectChatAttachments(Ref ref, Future<void> Function() collect) async {
+  final previousSelection = List<CrossFile>.of(ref.read(selectedSendingFilesProvider));
+  ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(const []));
+  try {
+    await collect();
+    return List<CrossFile>.of(ref.read(selectedSendingFilesProvider));
+  } finally {
+    ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(previousSelection));
+  }
+}
+
+String? _fileTransferError(SendSessionResult? result, CrossFile file) {
+  if (result == null || !result.hasError) {
+    return null;
+  }
+
+  final sentFile = result.files.values.firstWhereOrNull((entry) => entry.file.fileName == file.name && entry.file.size == file.size);
+  if (sentFile != null && sentFile.status == FileStatus.failed) {
+    return _cleanFileTransferError(sentFile.errorMessage ?? result.firstErrorMessage);
+  }
+  if (result.status != SessionStatus.finished) {
+    return _cleanFileTransferError(result.firstErrorMessage ?? result.errorMessage ?? result.status.name);
+  }
+  return null;
+}
+
+String? _cleanFileTransferError(String? rawError) {
+  final error = rawError?.trim();
+  if (error == null || error.isEmpty) {
+    return null;
+  }
+  if (error.contains('Status code: 400') && error.contains('/upload')) {
+    return 'The receiving device rejected this file upload. Please update both devices and try again.';
+  }
+  if (error.contains('Status code: 400')) {
+    return 'The receiving device rejected this file transfer.';
+  }
+  return error;
 }
 
 List<Device> _uniqueDevices(Iterable<Device> devices) {
