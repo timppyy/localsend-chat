@@ -375,6 +375,82 @@ void main() {
     verify(persistenceService.setChatMessages([otherPeerMessage]));
     verify(persistenceService.setChatConversations(service.state.conversations));
   });
+
+  test('clear conversation does not delete local files by default', () async {
+    final deletedPaths = <String>[];
+    final message = _message(
+      id: 'message-1',
+      text: '',
+      filePath: r'C:\Temp\localsend-chat\clipboard\clipboard.png',
+      timestamp: DateTime.utc(2026, 6, 18, 11),
+    );
+    when(persistenceService.getChatMessages()).thenReturn([message]);
+    when(persistenceService.getChatConversations()).thenReturn([
+      ChatConversation(
+        peerFingerprint: 'fp1',
+        alias: 'Office PC',
+        lastIp: '192.168.1.42',
+        lastPort: 53317,
+        https: false,
+        lastMessage: 'clipboard.png',
+        updatedAt: message.timestamp,
+      ),
+    ]);
+    final service = ReduxNotifier.test(
+      redux: ChatService(
+        persistence: persistenceService,
+        canDeleteLocalChatFile: (_) async => true,
+        deleteLocalChatFile: (path) async {
+          deletedPaths.add(path);
+        },
+      ),
+    );
+
+    await service.dispatchAsync(ClearChatConversationAction('fp1'));
+
+    expect(deletedPaths, isEmpty);
+  });
+
+  test('clear conversation only deletes safe local files when requested', () async {
+    final deletedPaths = <String>[];
+    final safeMessage = _message(
+      id: 'message-1',
+      text: '',
+      filePath: r'C:\Temp\localsend-chat\clipboard\clipboard.png',
+      timestamp: DateTime.utc(2026, 6, 18, 11),
+    );
+    final downloadedMessage = _message(
+      id: 'message-2',
+      text: '',
+      filePath: r'C:\Users\admin\Downloads\photo.png',
+      timestamp: DateTime.utc(2026, 6, 18, 12),
+    );
+    when(persistenceService.getChatMessages()).thenReturn([safeMessage, downloadedMessage]);
+    when(persistenceService.getChatConversations()).thenReturn([
+      ChatConversation(
+        peerFingerprint: 'fp1',
+        alias: 'Office PC',
+        lastIp: '192.168.1.42',
+        lastPort: 53317,
+        https: false,
+        lastMessage: 'photo.png',
+        updatedAt: downloadedMessage.timestamp,
+      ),
+    ]);
+    final service = ReduxNotifier.test(
+      redux: ChatService(
+        persistence: persistenceService,
+        canDeleteLocalChatFile: (path) async => path.contains(r'localsend-chat\clipboard'),
+        deleteLocalChatFile: (path) async {
+          deletedPaths.add(path);
+        },
+      ),
+    );
+
+    await service.dispatchAsync(ClearChatConversationAction('fp1', deleteLocalFiles: true));
+
+    expect(deletedPaths, [safeMessage.filePath]);
+  });
 }
 
 ChatTrustedDevice _trustedDevice(String fingerprint, {required String token}) {
@@ -415,17 +491,18 @@ ChatMessage _message({
   required String text,
   required DateTime timestamp,
   String peerFingerprint = 'fp1',
+  String? filePath,
 }) {
   return ChatMessage(
     id: id,
     peerFingerprint: peerFingerprint,
     direction: ChatMessageDirection.outgoing,
-    kind: ChatMessageKind.text,
+    kind: filePath == null ? ChatMessageKind.text : ChatMessageKind.file,
     status: ChatMessageStatus.sent,
     text: text,
-    fileName: null,
-    fileSize: null,
-    filePath: null,
+    fileName: filePath == null ? null : 'photo.png',
+    fileSize: filePath == null ? null : 1024,
+    filePath: filePath,
     errorMessage: null,
     timestamp: timestamp,
   );

@@ -40,6 +40,9 @@ typedef ChatClipboardImagePersister =
       required Uint8List bytes,
     });
 
+const _chatClipboardCacheDir = 'localsend-chat';
+const _chatClipboardImageDir = 'clipboard';
+
 Future<ChatClipboardPayload> readChatClipboard({
   ChatClipboardImageReader? readImage,
   ChatClipboardFileReader readFiles = Pasteboard.files,
@@ -107,12 +110,27 @@ Future<String> _persistClipboardImage({
   required String fileName,
   required Uint8List bytes,
 }) async {
-  final baseDir = await getTemporaryDirectory();
-  final directory = Directory(path.join(baseDir.path, 'localsend-chat', 'clipboard'));
+  final directory = await _clipboardImageDirectory();
   await directory.create(recursive: true);
   final file = File(path.join(directory.path, fileName));
   await file.writeAsBytes(bytes, flush: true);
   return file.path;
+}
+
+Future<bool> isManagedChatClipboardFilePath(String? filePath) async {
+  if (filePath == null || filePath.isEmpty) {
+    return false;
+  }
+
+  final directory = await _clipboardImageDirectory();
+  final directoryPath = path.normalize(directory.absolute.path);
+  final candidatePath = path.normalize(File(filePath).absolute.path);
+  return path.isWithin(directoryPath, candidatePath);
+}
+
+Future<Directory> _clipboardImageDirectory() async {
+  final baseDir = await getTemporaryDirectory();
+  return Directory(path.join(baseDir.path, _chatClipboardCacheDir, _chatClipboardImageDir));
 }
 
 Future<Uint8List?> _readClipboardImage() async {

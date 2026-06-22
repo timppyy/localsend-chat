@@ -16,11 +16,14 @@ import 'package:localsend_app/model/state/chat_state.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/persistence_provider.dart';
+import 'package:localsend_app/util/chat_clipboard_helper.dart';
+import 'package:logging/logging.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 const _uuid = Uuid();
 const _maxMessagesPerConversation = 500;
+final _logger = Logger('ChatService');
 
 class ChatHttpResponse {
   final int statusCode;
@@ -40,6 +43,8 @@ typedef ChatPostJson =
     });
 typedef ChatDeviceLookup = Device? Function(String fingerprint);
 typedef ChatLocalDevice = Device Function();
+typedef ChatLocalFilePolicy = Future<bool> Function(String path);
+typedef ChatLocalFileDelete = Future<void> Function(String path);
 
 final chatProvider = ReduxProvider<ChatService, ChatState>((ref) {
   return ChatService(
@@ -54,16 +59,22 @@ class ChatService extends ReduxNotifier<ChatState> {
   final ChatPostJson? _postJsonOverride;
   final ChatDeviceLookup _findDevice;
   final ChatLocalDevice? _localDevice;
+  final ChatLocalFilePolicy _canDeleteLocalChatFile;
+  final ChatLocalFileDelete _deleteLocalChatFile;
 
   ChatService({
     required PersistenceService persistence,
     ChatPostJson? postJson,
     ChatDeviceLookup? findDevice,
     ChatLocalDevice? localDevice,
+    ChatLocalFilePolicy? canDeleteLocalChatFile,
+    ChatLocalFileDelete? deleteLocalChatFile,
   }) : _persistence = persistence,
        _postJsonOverride = postJson,
        _findDevice = findDevice ?? ((_) => null),
-       _localDevice = localDevice;
+       _localDevice = localDevice,
+       _canDeleteLocalChatFile = canDeleteLocalChatFile ?? isManagedChatClipboardFilePath,
+       _deleteLocalChatFile = deleteLocalChatFile ?? _deleteLocalChatFileIfExists;
 
   @override
   ChatState init() {
@@ -464,22 +475,50 @@ class DeleteChatMessageAction extends AsyncReduxAction<ChatService, ChatState> {
 
 class ClearChatConversationAction extends AsyncReduxAction<ChatService, ChatState> {
   final String peerFingerprint;
+  final bool deleteLocalFiles;
 
-  ClearChatConversationAction(this.peerFingerprint);
+  ClearChatConversationAction(
+    this.peerFingerprint, {
+    this.deleteLocalFiles = false,
+  });
 
   @override
   Future<ChatState> reduce() async {
+    final removedMessages = state.messages.where((message) => message.peerFingerprint == peerFingerprint).toList();
     final messages = state.messages.where((message) => message.peerFingerprint != peerFingerprint).toList();
     final conversations = state.conversations.where((conversation) => conversation.peerFingerprint != peerFingerprint).toList();
 
     await notifier._persistence.setChatMessages(messages);
     await notifier._persistence.setChatConversations(conversations);
+    if (deleteLocalFiles) {
+      await _deleteSafeLocalFiles(removedMessages);
+    }
 
     return state.copyWith(
       messages: messages,
       conversations: conversations,
       selectedFingerprint: state.selectedFingerprint == peerFingerprint ? null : state.selectedFingerprint,
     );
+  }
+
+  Future<void> _deleteSafeLocalFiles(List<ChatMessage> removedMessages) async {
+    final paths = removedMessages.map((message) => message.filePath).nonNulls.toSet();
+    for (final filePath in paths) {
+      try {
+        if (await notifier._canDeleteLocalChatFile(filePath)) {
+          await notifier._deleteLocalChatFile(filePath);
+        }
+      } catch (e, stackTrace) {
+        _logger.warning('Failed to delete local chat file: $filePath', e, stackTrace);
+      }
+    }
+  }
+}
+
+Future<void> _deleteLocalChatFileIfExists(String filePath) async {
+  final file = File(filePath);
+  if (await file.exists()) {
+    await file.delete();
   }
 }
 

@@ -214,9 +214,12 @@ class _ChatDetail extends StatelessWidget {
             if (fingerprint == null) {
               return;
             }
-            final confirmed = await _confirmClearConversation(context, title);
-            if (confirmed == true) {
-              await vm.onClearConversation(fingerprint);
+            final choice = await _confirmClearConversation(context, title);
+            if (choice != null) {
+              await vm.onClearConversation(
+                fingerprint,
+                deleteLocalFiles: choice.deleteLocalFiles,
+              );
             }
           },
         ),
@@ -348,23 +351,57 @@ class _ChatHeader extends StatelessWidget {
   }
 }
 
-Future<bool?> _confirmClearConversation(BuildContext context, String title) async {
-  return await showDialog<bool>(
+class _ClearConversationChoice {
+  final bool deleteLocalFiles;
+
+  const _ClearConversationChoice({
+    required this.deleteLocalFiles,
+  });
+}
+
+Future<_ClearConversationChoice?> _confirmClearConversation(BuildContext context, String title) async {
+  var deleteLocalFiles = false;
+  return await showDialog<_ClearConversationChoice>(
     context: context,
     builder: (context) {
-      return AlertDialog(
-        title: const Text('Clear chat history?'),
-        content: Text('Clear local chat history with $title? This will not delete anything on the other device.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Clear'),
-          ),
-        ],
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Clear chat history?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Clear local chat history with $title? This will not delete anything on the other device.'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: deleteLocalFiles,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Also delete local cached attachments'),
+                  subtitle: const Text('Only app-created clipboard cache files are deleted. Downloaded files and manually picked files are kept.'),
+                  onChanged: (value) {
+                    setState(() {
+                      deleteLocalFiles = value ?? false;
+                    });
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(
+                  _ClearConversationChoice(deleteLocalFiles: deleteLocalFiles),
+                ),
+                child: const Text('Clear'),
+              ),
+            ],
+          );
+        },
       );
     },
   );

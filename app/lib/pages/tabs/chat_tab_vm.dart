@@ -28,7 +28,7 @@ class ChatTabVm {
   final Future<ChatClipboardPayload> Function() onPasteFromClipboard;
   final Future<void> Function(List<CrossFile> files) onSendFiles;
   final Future<void> Function(String messageId) onDeleteMessage;
-  final Future<void> Function(String peerFingerprint) onClearConversation;
+  final Future<void> Function(String peerFingerprint, {required bool deleteLocalFiles}) onClearConversation;
 
   const ChatTabVm({
     required this.conversations,
@@ -132,8 +132,15 @@ final chatTabVmProvider = ViewProvider((ref) {
     onDeleteMessage: (messageId) async {
       await ref.redux(chatProvider).dispatchAsync(DeleteChatMessageAction(messageId));
     },
-    onClearConversation: (peerFingerprint) async {
-      await ref.redux(chatProvider).dispatchAsync(ClearChatConversationAction(peerFingerprint));
+    onClearConversation: (peerFingerprint, {required deleteLocalFiles}) async {
+      await ref
+          .redux(chatProvider)
+          .dispatchAsync(
+            ClearChatConversationAction(
+              peerFingerprint,
+              deleteLocalFiles: deleteLocalFiles,
+            ),
+          );
     },
   );
 });
