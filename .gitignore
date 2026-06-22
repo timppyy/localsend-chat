@@ -4,6 +4,9 @@
 /app/AppDir
 /app/appimage-build
 
+# Release artifacts
+/app/LocalSendChat-*.zip
+
 .refena_inspector/
 
 /secrets
