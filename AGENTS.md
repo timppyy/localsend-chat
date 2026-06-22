@@ -162,6 +162,7 @@ Use `.github/workflows/release_windows_zip.yml` for Windows desktop release asse
 - After each release run, verify the asset exists on the GitHub Release page; do not rely on raw links to files committed under `app/`.
 
 Detailed steps are in `docs/release_windows_zip.md`.
+
 Windows-specific notes:
 
 - Flutter plugin builds require Windows Developer Mode or equivalent symlink privilege.
@@ -185,6 +186,7 @@ Chat debugging and UX notes:
 - `flutter test test/unit` passed: 73 tests.
 - Chat-related scoped analyze passed with no issues.
 - `flutter build windows` succeeded and produced `app/build/windows/x64/runner/Release/localsend_app.exe`.
+- `Release Windows ZIP` workflow was verified on GitHub Actions with `v1.17.0-chat.6`; it uploaded `LocalSendChat-v1.17.0-chat.6-windows-x64.zip` as a GitHub Release Asset.
 - Full `flutter analyze` may include unrelated `rust_builder/cargokit/build_tool` dependency noise if that subpackage has not resolved its own dependencies.
 
 ## Git Hygiene
