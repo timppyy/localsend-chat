@@ -180,7 +180,7 @@ class _ConversationTile extends StatelessWidget {
   }
 }
 
-class _ChatDetail extends StatelessWidget {
+class _ChatDetail extends StatefulWidget {
   final ChatTabVm vm;
   final TextEditingController controller;
   final List<CrossFile> draftAttachments;
@@ -198,7 +198,37 @@ class _ChatDetail extends StatelessWidget {
   });
 
   @override
+  State<_ChatDetail> createState() => _ChatDetailState();
+}
+
+class _ChatDetailState extends State<_ChatDetail> {
+  final _messageScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleScrollToLatest();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.vm.selectedFingerprint != widget.vm.selectedFingerprint ||
+        oldWidget.vm.messages.length != widget.vm.messages.length ||
+        _lastMessageId(oldWidget.vm.messages) != _lastMessageId(widget.vm.messages)) {
+      _scheduleScrollToLatest();
+    }
+  }
+
+  @override
+  void dispose() {
+    _messageScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final vm = widget.vm;
     final title = _title(vm.selectedConversation, vm.selectedDevice);
     if (vm.selectedFingerprint == null) {
       return const Center(child: Text('Select a device to start chatting.'));
@@ -227,6 +257,7 @@ class _ChatDetail extends StatelessWidget {
           child: vm.messages.isEmpty
               ? const Center(child: Text('No messages yet.'))
               : ListView.builder(
+                  controller: _messageScrollController,
                   padding: const EdgeInsets.all(18),
                   itemCount: vm.messages.length,
                   itemBuilder: (context, index) {
@@ -238,11 +269,11 @@ class _ChatDetail extends StatelessWidget {
                 ),
         ),
         ChatComposer(
-          controller: controller,
-          attachments: draftAttachments,
+          controller: widget.controller,
+          attachments: widget.draftAttachments,
           onAttach: () async {
             final files = await vm.onPickFiles(context);
-            onAddAttachments(files);
+            widget.onAddAttachments(files);
           },
           onPasteFromClipboard: () async {
             final payload = await vm.onPasteFromClipboard();
@@ -252,17 +283,17 @@ class _ChatDetail extends StatelessWidget {
             _applyClipboardPayload(context, payload);
           },
           onSend: () async {
-            final text = controller.text;
-            final files = List<CrossFile>.of(draftAttachments);
+            final text = widget.controller.text;
+            final files = List<CrossFile>.of(widget.draftAttachments);
             if (text.trim().isEmpty && files.isEmpty) {
               return;
             }
-            controller.clear();
-            onClearAttachments();
+            widget.controller.clear();
+            widget.onClearAttachments();
             await vm.onSendText(text);
             await vm.onSendFiles(files);
           },
-          onRemoveAttachment: onRemoveAttachment,
+          onRemoveAttachment: widget.onRemoveAttachment,
         ),
       ],
     );
@@ -274,19 +305,19 @@ class _ChatDetail extends StatelessWidget {
 
   void _applyClipboardPayload(BuildContext context, ChatClipboardPayload payload) {
     if (payload.files.isNotEmpty) {
-      onAddAttachments(payload.files);
+      widget.onAddAttachments(payload.files);
     }
 
     final text = payload.text;
     if (text != null && text.isNotEmpty) {
-      final value = controller.value;
+      final value = widget.controller.value;
       final selection = value.selection;
       final start = selection.isValid ? selection.start.clamp(0, value.text.length).toInt() : value.text.length;
       final end = selection.isValid ? selection.end.clamp(0, value.text.length).toInt() : value.text.length;
       final replaceStart = start < end ? start : end;
       final replaceEnd = start < end ? end : start;
       final nextText = value.text.replaceRange(replaceStart, replaceEnd, text);
-      controller.value = value.copyWith(
+      widget.controller.value = value.copyWith(
         text: nextText,
         selection: TextSelection.collapsed(offset: replaceStart + text.length),
         composing: TextRange.empty,
@@ -299,6 +330,19 @@ class _ChatDetail extends StatelessWidget {
       );
     }
   }
+
+  void _scheduleScrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_messageScrollController.hasClients) {
+        return;
+      }
+      _messageScrollController.jumpTo(_messageScrollController.position.maxScrollExtent);
+    });
+  }
+}
+
+String? _lastMessageId(List<ChatMessage> messages) {
+  return messages.isEmpty ? null : messages.last.id;
 }
 
 class _ChatHeader extends StatelessWidget {
