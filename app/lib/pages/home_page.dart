@@ -22,6 +22,7 @@ import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/native/tray_helper.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
+import 'package:window_manager/window_manager.dart';
 
 enum HomeTab {
   receive(Icons.wifi),
@@ -252,6 +253,10 @@ class _HomePageState extends State<HomePage> with Refena {
           return;
         }
 
+        await _showChatPopupFromBackground();
+        if (!context.mounted) {
+          return;
+        }
         final view = await showDialog<bool>(
           context: context,
           builder: (context) {
@@ -284,5 +289,15 @@ class _HomePageState extends State<HomePage> with Refena {
     await showFromTray();
     ref.redux(chatProvider).dispatch(SelectConversationAction(peerFingerprint));
     ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(HomeTab.chat));
+  }
+
+  Future<void> _showChatPopupFromBackground() async {
+    if (!checkPlatformHasTray()) {
+      return;
+    }
+
+    if (await windowManager.isMinimized() || !(await windowManager.isVisible()) || !(await windowManager.isFocused())) {
+      await showFromTray();
+    }
   }
 }
