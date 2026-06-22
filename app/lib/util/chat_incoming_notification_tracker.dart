@@ -19,6 +19,7 @@ class ChatIncomingNotificationTracker {
   ChatIncomingNotificationEvent? nextEvent(
     ChatState state, {
     required bool isViewingChat,
+    required bool isAppForeground,
   }) {
     if (!_initialized) {
       _knownMessageIds.addAll(state.messages.map((message) => message.id));
@@ -33,7 +34,7 @@ class ChatIncomingNotificationTracker {
     _knownMessageIds.addAll(state.messages.map((message) => message.id));
 
     for (final message in newIncomingMessages) {
-      if (isViewingChat && state.selectedFingerprint == message.peerFingerprint) {
+      if (isAppForeground && isViewingChat && state.selectedFingerprint == message.peerFingerprint) {
         continue;
       }
       final conversation = state.conversations.firstWhereOrNull((entry) => entry.peerFingerprint == message.peerFingerprint);

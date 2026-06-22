@@ -12,6 +12,7 @@ void main() {
     final event = tracker.nextEvent(
       state,
       isViewingChat: false,
+      isAppForeground: true,
     );
 
     expect(event, isNull);
@@ -19,7 +20,7 @@ void main() {
 
   test('does not notify while viewing the selected conversation', () {
     final tracker = ChatIncomingNotificationTracker();
-    tracker.nextEvent(_state(), isViewingChat: false);
+    tracker.nextEvent(_state(), isViewingChat: false, isAppForeground: true);
     final state = _state(
       selectedFingerprint: 'fp1',
       messages: [_incoming('message-1')],
@@ -28,19 +29,39 @@ void main() {
     final event = tracker.nextEvent(
       state,
       isViewingChat: true,
+      isAppForeground: true,
     );
 
     expect(event, isNull);
   });
 
+  test('notifies while viewing the selected conversation when the app is not foreground', () {
+    final tracker = ChatIncomingNotificationTracker();
+    tracker.nextEvent(_state(), isViewingChat: false, isAppForeground: true);
+    final state = _state(
+      selectedFingerprint: 'fp1',
+      messages: [_incoming('message-1')],
+    );
+
+    final event = tracker.nextEvent(
+      state,
+      isViewingChat: true,
+      isAppForeground: false,
+    );
+
+    expect(event, isNotNull);
+    expect(event!.message.id, 'message-1');
+  });
+
   test('notifies for a new incoming message outside the selected conversation', () {
     final tracker = ChatIncomingNotificationTracker();
-    tracker.nextEvent(_state(), isViewingChat: false);
+    tracker.nextEvent(_state(), isViewingChat: false, isAppForeground: true);
     final state = _state(messages: [_incoming('message-1')]);
 
     final event = tracker.nextEvent(
       state,
       isViewingChat: false,
+      isAppForeground: true,
     );
 
     expect(event, isNotNull);
@@ -50,12 +71,13 @@ void main() {
 
   test('ignores outgoing messages', () {
     final tracker = ChatIncomingNotificationTracker();
-    tracker.nextEvent(_state(), isViewingChat: false);
+    tracker.nextEvent(_state(), isViewingChat: false, isAppForeground: true);
     final state = _state(messages: [_outgoing('message-1')]);
 
     final event = tracker.nextEvent(
       state,
       isViewingChat: false,
+      isAppForeground: true,
     );
 
     expect(event, isNull);

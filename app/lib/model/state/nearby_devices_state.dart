@@ -23,19 +23,34 @@ class NearbyDevicesState with NearbyDevicesStateMappable {
 
   Map<String, Device> get allDevices {
     final Map<String, Device> allDevices = {};
-    allDevices.addAll(devices);
+    for (final device in devices.values) {
+      _addOrMergeDevice(allDevices, device, preferredKey: device.ip ?? device.fingerprint);
+    }
     for (final devices in signalingDevices.values) {
       for (final device in devices) {
-        final currentDevice = allDevices[device.fingerprint];
-        if (currentDevice != null && currentDevice.alias == device.alias) {
-          allDevices[device.fingerprint] = currentDevice.merge(device);
-        } else {
-          allDevices[device.fingerprint] = device;
-        }
+        _addOrMergeDevice(allDevices, device, preferredKey: device.signalingId ?? device.fingerprint);
       }
     }
     return allDevices;
   }
+}
+
+void _addOrMergeDevice(Map<String, Device> devices, Device device, {required String preferredKey}) {
+  for (final entry in devices.entries) {
+    final currentDevice = entry.value;
+    if (currentDevice.fingerprint == device.fingerprint && currentDevice.alias == device.alias) {
+      devices[entry.key] = currentDevice.merge(device);
+      return;
+    }
+  }
+
+  var key = preferredKey;
+  var suffix = 1;
+  while (devices.containsKey(key)) {
+    suffix++;
+    key = '$preferredKey#$suffix';
+  }
+  devices[key] = device;
 }
 
 extension on Device {

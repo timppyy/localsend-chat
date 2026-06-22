@@ -84,6 +84,8 @@ $env:LOCALAPPDATA='D:\Project\localsend-chat\.fvm\appdata\Local'
 $env:DART_SUPPRESS_ANALYTICS='true'
 ```
 
+In Codex managed sandboxes, request command escalation up front for Windows desktop builds. `flutter build windows` invokes Visual Studio/MSBuild native tooling, including MSBuild `FileTracker`, which needs process/cache/filesystem access outside the workspace sandbox and may fail with `MSB4018`, `FileTracker`, or `E_ACCESSDENIED` if first attempted unprivileged. Do not waste a failed sandboxed build attempt; run the Windows build with `sandbox_permissions: "require_escalated"` and a justification that MSBuild needs access outside the workspace sandbox.
+
 From `common/`:
 
 ```powershell
@@ -137,6 +139,7 @@ This is the verified flow from the final `features/localsend-chat` build pass:
    ..\.fvm\flutter_sdk\bin\flutter.bat test test/unit
    ```
 6. Build Windows:
+   In Codex managed sandboxes, request escalation before running this command because Visual Studio/MSBuild `FileTracker` needs access outside the workspace sandbox.
    ```powershell
    ..\.fvm\flutter_sdk\bin\flutter.bat build windows
    ```
@@ -176,6 +179,7 @@ Chat debugging and UX notes:
 
 - A chat bubble that shows `FormatException: Unexpected character ... Not found` means the sender tried to parse a plain-text HTTP error as JSON. The common cause is that the target device does not expose the chat route, for example an older/non-chat LocalSend build or a mismatched chat endpoint.
 - Keep transport/parser errors out of persisted chat text. Convert non-JSON HTTP responses into a short user-facing error such as `Chat is not available on this device.` before saving `ChatMessage.errorMessage`.
+- Incoming chat notifications should only be suppressed when the app window is foreground/focused and the user is viewing the selected conversation. If the app is minimized, hidden, or unfocused, still notify even when the Chat tab/current conversation is selected.
 - Message text should use `SelectableText` so users can select and copy partial text with the platform selection toolbar.
 - Each chat message bubble should keep a compact actions menu for whole-message copy and local message deletion.
 - Deleting a message is local history cleanup: remove it from persisted chat messages, then refresh the conversation summary from the latest remaining message or remove the conversation if no messages remain.

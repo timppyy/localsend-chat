@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:bitsdojo_window/bitsdojo_window.dart';
@@ -67,11 +68,12 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with Refena {
+class _HomePageState extends State<HomePage> with WindowListener, Refena {
   bool _dragAndDropIndicator = false;
   final _chatNotificationTracker = ChatIncomingNotificationTracker();
   late final ChatSystemNotificationService _chatSystemNotificationService;
   bool _chatNotificationVisible = false;
+  bool _isChatWindowForeground = true;
 
   @override
   void initState() {
@@ -79,11 +81,25 @@ class _HomePageState extends State<HomePage> with Refena {
     _chatSystemNotificationService = ChatSystemNotificationService(
       onSelected: _openChatConversation,
     );
+    if (checkPlatformIsDesktop()) {
+      windowManager.addListener(this);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_refreshChatWindowForeground());
+      });
+    }
 
     ensureRef((ref) async {
       ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(widget.initialTab));
       await postInit(context, ref, widget.appStart);
     });
+  }
+
+  @override
+  void dispose() {
+    if (checkPlatformIsDesktop()) {
+      windowManager.removeListener(this);
+    }
+    super.dispose();
   }
 
   @override
@@ -97,6 +113,7 @@ class _HomePageState extends State<HomePage> with Refena {
       event: _chatNotificationTracker.nextEvent(
         chatState,
         isViewingChat: vm.currentTab == HomeTab.chat,
+        isAppForeground: _isChatWindowForeground,
       ),
       mode: notificationMode,
     );
@@ -285,5 +302,42 @@ class _HomePageState extends State<HomePage> with Refena {
     if (await windowManager.isMinimized() || !(await windowManager.isVisible()) || !(await windowManager.isFocused())) {
       await showFromTray();
     }
+  }
+
+  @override
+  void onWindowFocus() {
+    _setChatWindowForeground(true);
+  }
+
+  @override
+  void onWindowBlur() {
+    _setChatWindowForeground(false);
+  }
+
+  @override
+  void onWindowMinimize() {
+    _setChatWindowForeground(false);
+  }
+
+  @override
+  void onWindowRestore() {
+    unawaited(_refreshChatWindowForeground());
+  }
+
+  Future<void> _refreshChatWindowForeground() async {
+    if (!checkPlatformIsDesktop()) {
+      return;
+    }
+    final isForeground = !(await windowManager.isMinimized()) && await windowManager.isVisible() && await windowManager.isFocused();
+    _setChatWindowForeground(isForeground);
+  }
+
+  void _setChatWindowForeground(bool isForeground) {
+    if (!mounted || _isChatWindowForeground == isForeground) {
+      return;
+    }
+    setState(() {
+      _isChatWindowForeground = isForeground;
+    });
   }
 }

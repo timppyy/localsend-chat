@@ -107,10 +107,12 @@ class _SetupSignalingConnection extends AsyncGlobalAction {
     );
 
     try {
+      ClientInfo? signalingClient;
       await for (final message in stream) {
         switch (message) {
-          case WsServerMessage_Hello():
-            for (final d in message.peers) {
+          case WsServerMessage_Hello(client: final client, peers: final peers):
+            signalingClient = client;
+            for (final d in visibleSignalingPeers(client: client, peers: peers)) {
               ref
                   .redux(nearbyDevicesProvider)
                   .dispatch(
@@ -122,6 +124,9 @@ class _SetupSignalingConnection extends AsyncGlobalAction {
             break;
           case WsServerMessage_Join(peer: final peer):
           case WsServerMessage_Update(peer: final peer):
+            if (signalingClient != null && _isOwnSignalingPeer(client: signalingClient, peer: peer)) {
+              break;
+            }
             ref
                 .redux(nearbyDevicesProvider)
                 .dispatch(
@@ -222,6 +227,20 @@ extension ClientInfoExt on ClientInfo {
       },
     );
   }
+}
+
+Iterable<ClientInfo> visibleSignalingPeers({
+  required ClientInfo client,
+  required Iterable<ClientInfo> peers,
+}) {
+  return peers.where((peer) => !_isOwnSignalingPeer(client: client, peer: peer));
+}
+
+bool _isOwnSignalingPeer({
+  required ClientInfo client,
+  required ClientInfo peer,
+}) {
+  return peer.id == client.id || peer.token == client.token;
 }
 
 extension on rust.DeviceType {
