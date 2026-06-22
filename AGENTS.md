@@ -179,11 +179,15 @@ Chat debugging and UX notes:
 - Message text should use `SelectableText` so users can select and copy partial text with the platform selection toolbar.
 - Each chat message bubble should keep a compact actions menu for whole-message copy and local message deletion.
 - Deleting a message is local history cleanup: remove it from persisted chat messages, then refresh the conversation summary from the latest remaining message or remove the conversation if no messages remain.
+- File chat bubbles should be interactive attachment cards, not plain file-name text. Use the persisted `ChatMessage.filePath` when available so both sent and received files can be opened from the chat history.
+- Preview only local raster images that Flutter can render reliably in `Image.file` (`bmp`, `gif`, `jpg`, `jpeg`, `png`, `webp`). Keep formats such as `svg`, `heic`, and `dng` as normal file attachments unless a dedicated renderer is added.
+- Double-clicking a previewable image opens an in-app image preview dialog with zoom/pan. Clicking or double-clicking ordinary files opens them with the system default app. Attachment menus should include copy, open, show in folder when a local path exists, and delete.
+- Missing or deleted attachment paths should show a short user-facing error instead of throwing.
 
 ## Current Validation Notes
 
 - Verified on this machine with Flutter 3.38.10 / Dart 3.10.9 and Visual Studio 2026.
-- `flutter test test/unit` passed: 73 tests.
+- `flutter test test/unit` passed: 92 tests.
 - Chat-related scoped analyze passed with no issues.
 - `flutter build windows` succeeded and produced `app/build/windows/x64/runner/Release/localsend_app.exe`.
 - `Release Windows ZIP` workflow was verified on GitHub Actions with `v1.17.0-chat.6`; it uploaded `LocalSendChat-v1.17.0-chat.6-windows-x64.zip` as a GitHub Release Asset.

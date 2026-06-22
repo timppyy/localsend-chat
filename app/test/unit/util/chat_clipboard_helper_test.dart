@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:common/model/file_type.dart';
 import 'package:localsend_app/model/cross_file.dart';
 import 'package:localsend_app/util/chat_clipboard_helper.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
@@ -41,6 +43,34 @@ void main() {
     expect(result.files.single.path, r'C:\Temp\LocalSendChat\clipboard_2026-06-21_23-39.png');
     expect(result.files.single.bytes, isNull);
     expect(result.files.single.thumbnail, imageBytes);
+  });
+
+  test('persists clipboard image under the selected destination month folder', () async {
+    final destination = await Directory.systemTemp.createTemp('localsend-chat-test-');
+    addTearDown(() async {
+      if (await destination.exists()) {
+        await destination.delete(recursive: true);
+      }
+    });
+
+    final imageBytes = Uint8List.fromList([1, 2, 3]);
+    final result = await readChatClipboard(
+      destinationDirectory: destination.path,
+      readImage: () async => imageBytes,
+      readFiles: () async => const [],
+      readText: () async => 'text fallback',
+      detectImageType: (_) => 'png',
+      now: () => DateTime(2026, 6, 21, 23, 39),
+    );
+
+    final expectedPath = p.join(
+      destination.path,
+      '202606',
+      'clipboard',
+      'clipboard_2026-06-21_23-39.png',
+    );
+    expect(result.files.single.path, expectedPath);
+    expect(await File(expectedPath).readAsBytes(), imageBytes);
   });
 
   test('reads clipboard files before clipboard text', () async {

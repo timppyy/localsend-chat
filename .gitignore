@@ -6,6 +6,7 @@
 
 # Release artifacts
 /app/LocalSendChat-*.zip
+.codex-release-*/
 
 .refena_inspector/
 

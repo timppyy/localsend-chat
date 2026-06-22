@@ -8,6 +8,7 @@ import 'package:localsend_app/util/determine_image_type.dart';
 import 'package:localsend_app/util/file_path_helper.dart';
 import 'package:localsend_app/util/image_converter.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
+import 'package:localsend_app/util/native/directories.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -42,15 +43,17 @@ typedef ChatClipboardImagePersister =
 
 const _chatClipboardCacheDir = 'localsend-chat';
 const _chatClipboardImageDir = 'clipboard';
+final _chatClipboardMonthDirPattern = RegExp(r'^\d{6}$');
 
 Future<ChatClipboardPayload> readChatClipboard({
+  String? destinationDirectory,
   ChatClipboardImageReader? readImage,
   ChatClipboardFileReader readFiles = Pasteboard.files,
   ChatClipboardTextReader? readText,
   ChatImageTypeDetector detectImageType = determineImageType,
   ChatBmpConverter convertBmp = convertBmpToPng,
   ChatClipboardFileConverter convertFilePath = _convertClipboardFilePath,
-  ChatClipboardImagePersister persistImage = _persistClipboardImage,
+  ChatClipboardImagePersister? persistImage,
   ChatClock? now,
 }) async {
   final image = await (readImage ?? _readClipboardImage)();
@@ -67,9 +70,17 @@ Future<ChatClipboardPayload> readChatClipboard({
     }
 
     final timestamp = now?.call() ?? DateTime.now();
+    final monthDirectoryName = '${timestamp.year}${timestamp.month.twoDigitString}';
     final fileName =
         'clipboard_${timestamp.year}-${timestamp.month.twoDigitString}-${timestamp.day.twoDigitString}_${timestamp.hour.twoDigitString}-${timestamp.minute.twoDigitString}.$imageType';
-    final filePath = await persistImage(fileName: fileName, bytes: imageBytes);
+    final filePath = persistImage == null
+        ? await _persistClipboardImage(
+            destinationDirectory: destinationDirectory,
+            monthDirectoryName: monthDirectoryName,
+            fileName: fileName,
+            bytes: imageBytes,
+          )
+        : await persistImage(fileName: fileName, bytes: imageBytes);
     return ChatClipboardPayload(
       text: null,
       files: [
@@ -107,10 +118,15 @@ Future<ChatClipboardPayload> readChatClipboard({
 }
 
 Future<String> _persistClipboardImage({
+  String? destinationDirectory,
+  String? monthDirectoryName,
   required String fileName,
   required Uint8List bytes,
 }) async {
-  final directory = await _clipboardImageDirectory();
+  final directory = await _clipboardImageDirectory(
+    destinationDirectory: destinationDirectory,
+    monthDirectoryName: monthDirectoryName,
+  );
   await directory.create(recursive: true);
   final file = File(path.join(directory.path, fileName));
   await file.writeAsBytes(bytes, flush: true);
@@ -122,15 +138,46 @@ Future<bool> isManagedChatClipboardFilePath(String? filePath) async {
     return false;
   }
 
-  final directory = await _clipboardImageDirectory();
-  final directoryPath = path.normalize(directory.absolute.path);
   final candidatePath = path.normalize(File(filePath).absolute.path);
-  return path.isWithin(directoryPath, candidatePath);
+  if (_isMonthlyManagedClipboardPath(candidatePath)) {
+    return true;
+  }
+
+  final legacyDirectory = await _legacyClipboardImageDirectory();
+  final legacyDirectoryPath = path.normalize(legacyDirectory.absolute.path);
+  return path.isWithin(legacyDirectoryPath, candidatePath);
 }
 
-Future<Directory> _clipboardImageDirectory() async {
+Future<Directory> _clipboardImageDirectory({
+  String? destinationDirectory,
+  String? monthDirectoryName,
+}) async {
+  final baseDir = destinationDirectory ?? await getDefaultDestinationDirectory();
+  return Directory(path.join(baseDir, monthDirectoryName ?? _monthDirectoryName(DateTime.now()), _chatClipboardImageDir));
+}
+
+Future<Directory> _legacyClipboardImageDirectory() async {
   final baseDir = await getTemporaryDirectory();
   return Directory(path.join(baseDir.path, _chatClipboardCacheDir, _chatClipboardImageDir));
+}
+
+bool _isMonthlyManagedClipboardPath(String filePath) {
+  final fileName = path.basename(filePath);
+  if (!fileName.startsWith('clipboard_')) {
+    return false;
+  }
+
+  final parent = path.basename(path.dirname(filePath));
+  if (parent != _chatClipboardImageDir) {
+    return false;
+  }
+
+  final monthDirectoryName = path.basename(path.dirname(path.dirname(filePath)));
+  return _chatClipboardMonthDirPattern.hasMatch(monthDirectoryName);
+}
+
+String _monthDirectoryName(DateTime timestamp) {
+  return '${timestamp.year}${timestamp.month.twoDigitString}';
 }
 
 Future<Uint8List?> _readClipboardImage() async {

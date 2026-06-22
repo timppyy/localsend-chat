@@ -11,7 +11,10 @@ import 'package:localsend_app/provider/chat_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
+import 'package:localsend_app/provider/settings_provider.dart';
+import 'package:localsend_app/util/chat_attachment_save_path.dart';
 import 'package:localsend_app/util/chat_clipboard_helper.dart';
+import 'package:localsend_app/util/native/directories.dart';
 import 'package:localsend_app/util/native/file_picker.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
@@ -60,6 +63,7 @@ final chatTabVmProvider = ViewProvider((ref) {
       ? <ChatMessage>[]
       : (chat.messages.where((message) => message.peerFingerprint == selectedFingerprint).toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp)));
+  final settings = ref.watch(settingsProvider);
 
   return ChatTabVm(
     conversations: chat.conversations,
@@ -93,7 +97,8 @@ final chatTabVmProvider = ViewProvider((ref) {
       });
     },
     onPasteFromClipboard: () async {
-      return await readChatClipboard();
+      final destinationDirectory = settings.destination ?? await getDefaultDestinationDirectory();
+      return await readChatClipboard(destinationDirectory: destinationDirectory);
     },
     onSendFiles: (files) async {
       if (selectedFingerprint == null || files.isEmpty) {
@@ -102,20 +107,24 @@ final chatTabVmProvider = ViewProvider((ref) {
       final target = selectedTarget;
       Object? sendError;
       SendSessionResult? result;
+      final timestamp = DateTime.now().toUtc();
+      final transferFiles = files.map((file) => _withChatAttachmentTransferFileName(file, timestamp)).toList();
       if (target != null) {
         try {
           result = await ref
               .notifier(sendProvider)
               .startSession(
                 target: target,
-                files: files,
+                files: transferFiles,
                 background: true,
               );
         } catch (e) {
           sendError = e;
         }
       }
-      for (final file in files) {
+      for (var i = 0; i < files.length; i++) {
+        final file = files[i];
+        final transferFile = transferFiles[i];
         await ref
             .redux(chatProvider)
             .dispatchAsync(
@@ -124,7 +133,7 @@ final chatTabVmProvider = ViewProvider((ref) {
                 fileName: file.name,
                 fileSize: file.size,
                 filePath: file.path,
-                errorMessage: sendError == null ? _fileTransferError(result, file) : _cleanFileTransferError(sendError.toString()),
+                errorMessage: sendError == null ? _fileTransferError(result, transferFile) : _cleanFileTransferError(sendError.toString()),
               ),
             );
       }
@@ -183,6 +192,23 @@ Future<List<CrossFile>> _collectChatAttachments(Ref ref, Future<void> Function()
   } finally {
     ref.redux(selectedSendingFilesProvider).dispatch(SetSelectionAction(previousSelection));
   }
+}
+
+CrossFile _withChatAttachmentTransferFileName(CrossFile file, DateTime timestamp) {
+  return CrossFile(
+    name: chatAttachmentTransferFileName(
+      fileName: file.name,
+      timestamp: timestamp,
+    ),
+    fileType: file.fileType,
+    size: file.size,
+    thumbnail: file.thumbnail,
+    asset: file.asset,
+    path: file.path,
+    bytes: file.bytes,
+    lastModified: file.lastModified,
+    lastAccessed: file.lastAccessed,
+  );
 }
 
 String? _fileTransferError(SendSessionResult? result, CrossFile file) {
