@@ -50,6 +50,8 @@ class TranslationsZhCn extends Translations {
   @override
   late final _TranslationsSendTabZhCn sendTab = _TranslationsSendTabZhCn._(_root);
   @override
+  late final _TranslationsChatTabZhCn chatTab = _TranslationsChatTabZhCn._(_root);
+  @override
   late final _TranslationsSettingsTabZhCn settingsTab = _TranslationsSettingsTabZhCn._(_root);
   @override
   late final _TranslationsTroubleshootPageZhCn troubleshootPage = _TranslationsTroubleshootPageZhCn._(_root);
@@ -224,6 +226,41 @@ class _TranslationsSendTabZhCn extends TranslationsSendTabEn {
   String get help => '请确保目标连接到同一个 Wi‑Fi 网络。';
   @override
   String get placeItems => '列出要分享的项目。';
+}
+
+// Path: chatTab
+class _TranslationsChatTabZhCn extends TranslationsChatTabEn {
+  _TranslationsChatTabZhCn._(TranslationsZhCn root) : this._root = root, super.internal(root);
+
+  final TranslationsZhCn _root; // ignore: unused_field
+
+  // Translations
+  @override
+  String get title => '聊天';
+  @override
+  String get chats => '聊天';
+  @override
+  String get nearbyDevices => '附近的设备';
+  @override
+  String get noNearbyDevices => '暂未发现附近设备。';
+  @override
+  String get noMessages => '还没有消息。';
+  @override
+  String get selectDevice => '选择一个设备开始聊天。';
+  @override
+  String get message => '消息';
+  @override
+  String get attachFile => '附加文件';
+  @override
+  String get send => '发送';
+  @override
+  String get file => '文件';
+  @override
+  String get allowTitle => '允许聊天？';
+  @override
+  String allowContent({required Object alias, required Object preview}) => '${alias} 想给你发送聊天消息。\n\n${preview}';
+  @override
+  String get allow => '允许';
 }
 
 // Path: settingsTab

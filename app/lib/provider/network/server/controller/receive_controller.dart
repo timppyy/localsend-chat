@@ -32,6 +32,7 @@ import 'package:localsend_app/provider/logging/discovery_logs_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/network/server/controller/common.dart';
+import 'package:localsend_app/provider/network/server/controller/register_response.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/network/server/server_utils.dart';
 import 'package:localsend_app/provider/progress_provider.dart';
@@ -175,16 +176,17 @@ class ReceiveController {
 
     final deviceInfo = server.ref.read(deviceInfoProvider);
 
-    final responseDto = InfoDto(
-      alias: alias,
-      version: protocolVersion,
-      deviceModel: deviceInfo.deviceModel,
-      deviceType: deviceInfo.deviceType,
-      fingerprint: fingerprint,
-      download: server.getState().webSendState != null,
+    return await request.respondJson(
+      200,
+      body: buildRegisterResponseBody(
+        alias: alias,
+        version: protocolVersion,
+        deviceModel: deviceInfo.deviceModel,
+        deviceType: deviceInfo.deviceType,
+        fingerprint: fingerprint,
+        download: server.getState().webSendState != null,
+      ),
     );
-
-    return await request.respondJson(200, body: responseDto.toJson());
   }
 
   Future<void> _prepareUploadHandler({

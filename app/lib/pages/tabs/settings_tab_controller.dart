@@ -71,7 +71,7 @@ class SettingsTabController extends ReduxNotifier<SettingsTabVm> {
       deviceInfo: _initialDeviceInfo,
       colorModes: _supportsDynamicColors ? ColorMode.values : ColorMode.values.where((e) => e != ColorMode.system).toList(),
       autoStart: false,
-      autoStartLaunchHidden: false,
+      autoStartLaunchHidden: true,
       showInContextMenu: false,
       onChangeTheme: (context, theme) async {
         await _settingsService.setTheme(theme);
@@ -179,7 +179,7 @@ class _SettingsTabInitAction extends AsyncReduxAction<SettingsTabController, Set
     final showInContextMenu = await isContextMenuEnabled();
     return state.copyWith(
       autoStart: autoStartEnabled,
-      autoStartLaunchHidden: autoStartHidden,
+      autoStartLaunchHidden: autoStartEnabled ? autoStartHidden : true,
       showInContextMenu: showInContextMenu,
     );
   }

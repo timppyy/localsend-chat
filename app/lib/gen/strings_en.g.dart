@@ -52,6 +52,7 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
   late final TranslationsGeneralEn general = TranslationsGeneralEn.internal(_root);
   late final TranslationsReceiveTabEn receiveTab = TranslationsReceiveTabEn.internal(_root);
   late final TranslationsSendTabEn sendTab = TranslationsSendTabEn.internal(_root);
+  late final TranslationsChatTabEn chatTab = TranslationsChatTabEn.internal(_root);
   late final TranslationsSettingsTabEn settingsTab = TranslationsSettingsTabEn.internal(_root);
   late final TranslationsTroubleshootPageEn troubleshootPage = TranslationsTroubleshootPageEn.internal(_root);
   late final TranslationsNetworkInterfacesPageEn networkInterfacesPage = TranslationsNetworkInterfacesPageEn.internal(_root);
@@ -254,6 +255,54 @@ class TranslationsSendTabEn {
 
   /// en: 'Place items to share.'
   String get placeItems => 'Place items to share.';
+}
+
+// Path: chatTab
+class TranslationsChatTabEn {
+  TranslationsChatTabEn.internal(this._root);
+
+  final Translations _root; // ignore: unused_field
+
+  // Translations
+
+  /// en: 'Chat'
+  String get title => 'Chat';
+
+  /// en: 'Chats'
+  String get chats => 'Chats';
+
+  /// en: 'Nearby devices'
+  String get nearbyDevices => 'Nearby devices';
+
+  /// en: 'No nearby devices yet.'
+  String get noNearbyDevices => 'No nearby devices yet.';
+
+  /// en: 'No messages yet.'
+  String get noMessages => 'No messages yet.';
+
+  /// en: 'Select a device to start chatting.'
+  String get selectDevice => 'Select a device to start chatting.';
+
+  /// en: 'Message'
+  String get message => 'Message';
+
+  /// en: 'Attach file'
+  String get attachFile => 'Attach file';
+
+  /// en: 'Send'
+  String get send => 'Send';
+
+  /// en: 'File'
+  String get file => 'File';
+
+  /// en: 'Allow chat?'
+  String get allowTitle => 'Allow chat?';
+
+  /// en: '{alias} wants to send you chat messages. {preview}'
+  String allowContent({required Object alias, required Object preview}) => '${alias} wants to send you chat messages.\n\n${preview}';
+
+  /// en: 'Allow'
+  String get allow => 'Allow';
 }
 
 // Path: settingsTab

@@ -31,7 +31,7 @@ void main() {
     when(persistenceService.isQuickSaveFromFavorites()).thenReturn(false);
     when(persistenceService.getReceivePin()).thenReturn(null);
     when(persistenceService.isAutoFinish()).thenReturn(false);
-    when(persistenceService.isMinimizeToTray()).thenReturn(false);
+    when(persistenceService.isMinimizeToTray()).thenReturn(true);
     when(persistenceService.isHttps()).thenReturn(true);
     when(persistenceService.getSendMode()).thenReturn(SendMode.single);
     when(persistenceService.getSaveWindowPlacement()).thenReturn(true);
@@ -44,11 +44,13 @@ void main() {
     when(persistenceService.getChatNotificationMode()).thenReturn(ChatNotificationMode.dialog);
   });
 
-  test('defaults chat notifications to dialog and persists system mode', () async {
+  test('defaults settings to the chat desktop profile and persists notification mode changes', () async {
     final service = Notifier.test(
       notifier: SettingsService(persistenceService),
     );
 
+    expect(service.state.minimizeToTray, true);
+    expect(service.state.enableAnimations, true);
     expect(service.state.chatNotificationMode, ChatNotificationMode.dialog);
 
     await service.notifier.setChatNotificationMode(ChatNotificationMode.system);

@@ -271,6 +271,21 @@ mod tests {
     }
 
     #[test]
+    fn test_register_response_accepts_lowercase_device_type() {
+        let json = r#"{
+            "alias": "PC_Work",
+            "version": "2.1",
+            "deviceModel": "Windows",
+            "deviceType": "desktop",
+            "fingerprint": "C2C8DE2C1DC252AC69B4A093DD54144F227B573F9BAF363C24FA3E42B2202E1E",
+            "download": false
+        }"#;
+
+        let dto: RegisterResponseDtoV2 = serde_json::from_str(json).unwrap();
+        assert_eq!(dto.device_type, Some(DeviceType::Desktop));
+    }
+
+    #[test]
     fn test_prepare_upload_request_v2() {
         let request = PrepareUploadRequestDtoV2 {
             info: RegisterDtoV2 {
