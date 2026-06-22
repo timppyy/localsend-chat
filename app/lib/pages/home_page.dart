@@ -7,6 +7,7 @@ import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/state/chat_notification_mode.dart';
+import 'package:localsend_app/pages/chat_incoming_prompt_page.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
 import 'package:localsend_app/pages/tabs/chat_tab.dart';
 import 'package:localsend_app/pages/tabs/receive_tab.dart';
@@ -22,6 +23,7 @@ import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/util/native/tray_helper.dart';
 import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
+import 'package:routerino/routerino.dart';
 import 'package:window_manager/window_manager.dart';
 
 enum HomeTab {
@@ -257,24 +259,8 @@ class _HomePageState extends State<HomePage> with Refena {
         if (!context.mounted) {
           return;
         }
-        final view = await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('New chat message'),
-              content: Text('${event.alias} \u7ed9\u4f60\u53d1\u9001\u4e86\u4e00\u6761\u65b0\u6d88\u606f\u3002\u662f\u5426\u67e5\u770b\uff1f'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Later'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('View'),
-                ),
-              ],
-            );
-          },
+        final bool? view = await Routerino.context.push(
+          () => ChatIncomingPromptPage(alias: event.alias),
         );
         if (view == true) {
           await _openChatConversation(event.message.peerFingerprint);
