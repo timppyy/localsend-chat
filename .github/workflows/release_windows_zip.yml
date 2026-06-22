@@ -1,0 +1,165 @@
+name: Release Windows ZIP
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to create or update, for example v1.17.0-chat.4"
+        required: true
+        type: string
+      ref_to_build:
+        description: "Branch, tag, or commit to build"
+        required: true
+        default: "features/localsend-chat"
+        type: string
+      release_name:
+        description: "Optional release title"
+        required: false
+        type: string
+      run_verification:
+        description: "Run chat tests and scoped analyze before packaging"
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "v*-chat.*"
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.38.10"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+  REF_TO_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.ref_to_build || github.ref_name }}
+  RUN_VERIFICATION: ${{ github.event_name != 'workflow_dispatch' || inputs.run_verification }}
+
+jobs:
+  build_and_release_windows_zip:
+    name: Build and publish Windows ZIP
+    runs-on: windows-latest
+
+    steps:
+      - name: Fix long file paths
+        run: git config --system core.longpaths true
+
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.REF_TO_BUILD }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Check Rust toolchain
+        shell: pwsh
+        run: rustup show
+
+      - name: Dependencies (common)
+        working-directory: common
+        run: flutter pub get
+
+      - name: Generate code (common)
+        working-directory: common
+        run: dart run build_runner build -d
+
+      - name: Dependencies (app)
+        working-directory: app
+        run: flutter pub get
+
+      - name: Dependencies (cargokit build tool)
+        working-directory: app/rust_builder/cargokit/build_tool
+        run: flutter pub get
+
+      - name: Generate translations (app)
+        working-directory: app
+        run: dart run slang
+
+      - name: Generate code (app)
+        working-directory: app
+        run: dart run build_runner build -d
+
+      - name: Run chat tests
+        if: env.RUN_VERIFICATION == 'true'
+        working-directory: app
+        run: flutter test test/unit/util/api_route_builder_test.dart test/unit/provider/chat_persistence_test.dart test/unit/provider/chat_provider_test.dart
+
+      - name: Run scoped analyze
+        if: env.RUN_VERIFICATION == 'true'
+        working-directory: app
+        run: flutter analyze lib test/unit/provider/chat_persistence_test.dart test/unit/provider/chat_provider_test.dart test/unit/util/api_route_builder_test.dart
+
+      - name: Build Windows app
+        working-directory: app
+        run: flutter build windows
+
+      - name: Package Windows ZIP
+        id: package
+        shell: pwsh
+        working-directory: app
+        run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          $assetName = "LocalSendChat-$env:RELEASE_TAG-windows-x64.zip"
+          $assetPath = Join-Path (Get-Location) $assetName
+
+          Set-Content -Path (Join-Path $releaseDir "settings.json") -Value "{}" -Encoding UTF8
+          Copy-Item ../scripts/windows/x64/msvcp140.dll $releaseDir
+          Copy-Item ../scripts/windows/x64/vcruntime140.dll $releaseDir
+          Copy-Item ../scripts/windows/x64/vcruntime140_1.dll $releaseDir
+
+          if (Test-Path $assetPath) {
+            Remove-Item $assetPath
+          }
+
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath $assetPath
+          $sha256 = (Get-FileHash -Algorithm SHA256 $assetPath).Hash
+
+          "asset_name=$assetName" >> $env:GITHUB_OUTPUT
+          "asset_path=$assetPath" >> $env:GITHUB_OUTPUT
+          "sha256=$sha256" >> $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-zip-x86-64-result
+          path: ${{ steps.package.outputs.asset_path }}
+
+      - name: Publish GitHub release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_NAME: ${{ steps.package.outputs.asset_name }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+          RELEASE_NAME_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || '' }}
+        run: |
+          $target = git rev-parse HEAD
+          $releaseName = $env:RELEASE_NAME_INPUT
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $releaseName = "LocalSend Chat $env:RELEASE_TAG"
+          }
+
+          $notes = @"
+          Windows desktop build for localsend-chat.
+
+          Artifact:
+          - $env:ASSET_NAME
+          - SHA256: $env:SHA256
+
+          Validation:
+          - Workflow built the Windows app with Flutter $env:FLUTTER_VERSION.
+          - Chat tests and scoped analyze: $env:RUN_VERIFICATION.
+          "@
+          Set-Content -Path release-notes.md -Value $notes.Trim() -Encoding UTF8
+
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $env:ASSET_PATH --repo $env:GITHUB_REPOSITORY --clobber
+            gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --title $releaseName --notes-file release-notes.md --latest
+          } else {
+            gh release create $env:RELEASE_TAG $env:ASSET_PATH --repo $env:GITHUB_REPOSITORY --target $target --title $releaseName --notes-file release-notes.md --latest
+          }
