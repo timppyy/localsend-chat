@@ -145,6 +145,23 @@ This is the verified flow from the final `features/localsend-chat` build pass:
    Built build\windows\x64\runner\Release\localsend_app.exe
    ```
 
+## Windows Release Asset Runbook
+
+Use `.github/workflows/release_windows_zip.yml` for Windows desktop release assets.
+
+- Do not commit release zip files into git history.
+- Do not use the full cross-platform `Release Draft` workflow for chat-only Windows zip releases.
+- Release tags use `v1.17.0-chat.N`.
+- The workflow can be triggered by pushing a matching tag or manually from GitHub Actions.
+- For manual runs, use:
+  - `tag_name`: `v1.17.0-chat.N`
+  - `ref_to_build`: `v1.17.0-chat.N`
+  - `release_name`: `LocalSend Chat v1.17.0-chat.N`
+  - `run_verification`: `true`
+- Successful runs must create or update the GitHub Release and upload `LocalSendChat-v1.17.0-chat.N-windows-x64.zip` as a Release Asset.
+- After each release run, verify the asset exists on the GitHub Release page; do not rely on raw links to files committed under `app/`.
+
+Detailed steps are in `docs/release_windows_zip.md`.
 Windows-specific notes:
 
 - Flutter plugin builds require Windows Developer Mode or equivalent symlink privilege.
