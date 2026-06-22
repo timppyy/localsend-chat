@@ -15,6 +15,7 @@ import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/persistence/receive_history_entry.dart';
 import 'package:localsend_app/model/send_mode.dart';
+import 'package:localsend_app/model/state/chat_notification_mode.dart';
 import 'package:localsend_app/provider/window_dimensions_provider.dart';
 import 'package:localsend_app/util/alias_generator.dart';
 import 'package:localsend_app/util/native/autostart_helper.dart';
@@ -97,6 +98,7 @@ const _enableAnimations = 'ls_enable_animations';
 const _deviceType = 'ls_device_type';
 const _deviceModel = 'ls_device_model';
 const _shareViaLinkAutoAccept = 'ls_share_via_link_auto_accept';
+const _chatNotificationMode = 'ls_chat_notification_mode';
 const _advancedSettingsKey = 'ls_advanced_settings';
 
 final persistenceProvider = Provider<PersistenceService>((ref) {
@@ -403,6 +405,15 @@ class PersistenceService {
 
   Future<void> setShareViaLinkAutoAccept(bool shareViaLinkAutoAccept) async {
     await _prefs.setBool(_shareViaLinkAutoAccept, shareViaLinkAutoAccept);
+  }
+
+  ChatNotificationMode getChatNotificationMode() {
+    final value = _prefs.getString(_chatNotificationMode);
+    return ChatNotificationMode.values.firstWhereOrNull((mode) => mode.name == value) ?? ChatNotificationMode.dialog;
+  }
+
+  Future<void> setChatNotificationMode(ChatNotificationMode mode) async {
+    await _prefs.setString(_chatNotificationMode, mode.name);
   }
 
   String getMulticastGroup() {

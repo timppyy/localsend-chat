@@ -325,6 +325,56 @@ void main() {
     verify(persistenceService.setChatMessages([older]));
     verify(persistenceService.setChatConversations(service.state.conversations));
   });
+
+  test('clears a local conversation and all of its messages', () async {
+    final firstPeerMessage = _message(
+      id: 'message-1',
+      text: 'first',
+      timestamp: DateTime.utc(2026, 6, 18, 11),
+    );
+    final secondPeerMessage = _message(
+      id: 'message-2',
+      text: 'second',
+      timestamp: DateTime.utc(2026, 6, 18, 12),
+    );
+    final otherPeerMessage = _message(
+      id: 'message-3',
+      text: 'keep me',
+      timestamp: DateTime.utc(2026, 6, 18, 13),
+      peerFingerprint: 'fp2',
+    );
+    when(persistenceService.getChatMessages()).thenReturn([firstPeerMessage, secondPeerMessage, otherPeerMessage]);
+    when(persistenceService.getChatConversations()).thenReturn([
+      ChatConversation(
+        peerFingerprint: 'fp1',
+        alias: 'Office PC',
+        lastIp: '192.168.1.42',
+        lastPort: 53317,
+        https: false,
+        lastMessage: 'second',
+        updatedAt: secondPeerMessage.timestamp,
+      ),
+      ChatConversation(
+        peerFingerprint: 'fp2',
+        alias: 'Laptop',
+        lastIp: '192.168.1.43',
+        lastPort: 53317,
+        https: false,
+        lastMessage: 'keep me',
+        updatedAt: otherPeerMessage.timestamp,
+      ),
+    ]);
+    final service = ReduxNotifier.test(
+      redux: ChatService(persistence: persistenceService),
+    );
+
+    await service.dispatchAsync(ClearChatConversationAction('fp1'));
+
+    expect(service.state.messages, [otherPeerMessage]);
+    expect(service.state.conversations.map((entry) => entry.peerFingerprint), ['fp2']);
+    verify(persistenceService.setChatMessages([otherPeerMessage]));
+    verify(persistenceService.setChatConversations(service.state.conversations));
+  });
 }
 
 ChatTrustedDevice _trustedDevice(String fingerprint, {required String token}) {
@@ -364,10 +414,11 @@ ChatMessage _message({
   required String id,
   required String text,
   required DateTime timestamp,
+  String peerFingerprint = 'fp1',
 }) {
   return ChatMessage(
     id: id,
-    peerFingerprint: 'fp1',
+    peerFingerprint: peerFingerprint,
     direction: ChatMessageDirection.outgoing,
     kind: ChatMessageKind.text,
     status: ChatMessageStatus.sent,

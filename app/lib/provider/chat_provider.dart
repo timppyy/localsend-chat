@@ -32,11 +32,12 @@ class ChatHttpResponse {
   });
 }
 
-typedef ChatPostJson = Future<ChatHttpResponse> Function({
-  required Device target,
-  required ApiRoute route,
-  required Map<String, dynamic> body,
-});
+typedef ChatPostJson =
+    Future<ChatHttpResponse> Function({
+      required Device target,
+      required ApiRoute route,
+      required Map<String, dynamic> body,
+    });
 typedef ChatDeviceLookup = Device? Function(String fingerprint);
 typedef ChatLocalDevice = Device Function();
 
@@ -84,8 +85,7 @@ class ChatService extends ReduxNotifier<ChatState> {
       return override(target: target, route: route, body: body);
     }
 
-    final client = HttpClient()
-      ..badCertificateCallback = (_, __, ___) => true;
+    final client = HttpClient()..badCertificateCallback = (_, __, ___) => true;
     try {
       final request = await client.postUrl(Uri.parse(route.target(target)));
       request.headers.contentType = ContentType.json;
@@ -458,6 +458,27 @@ class DeleteChatMessageAction extends AsyncReduxAction<ChatService, ChatState> {
     return state.copyWith(
       messages: messages,
       conversations: conversations,
+    );
+  }
+}
+
+class ClearChatConversationAction extends AsyncReduxAction<ChatService, ChatState> {
+  final String peerFingerprint;
+
+  ClearChatConversationAction(this.peerFingerprint);
+
+  @override
+  Future<ChatState> reduce() async {
+    final messages = state.messages.where((message) => message.peerFingerprint != peerFingerprint).toList();
+    final conversations = state.conversations.where((conversation) => conversation.peerFingerprint != peerFingerprint).toList();
+
+    await notifier._persistence.setChatMessages(messages);
+    await notifier._persistence.setChatConversations(conversations);
+
+    return state.copyWith(
+      messages: messages,
+      conversations: conversations,
+      selectedFingerprint: state.selectedFingerprint == peerFingerprint ? null : state.selectedFingerprint,
     );
   }
 }

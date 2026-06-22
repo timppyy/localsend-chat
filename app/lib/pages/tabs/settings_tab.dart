@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/persistence/color_mode.dart';
+import 'package:localsend_app/model/state/chat_notification_mode.dart';
 import 'package:localsend_app/pages/about/about_page.dart';
 import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
@@ -89,6 +90,22 @@ class SettingsTab extends StatelessWidget {
                         label: t.settingsTab.general.language,
                         buttonLabel: vm.settings.locale?.humanName ?? t.settingsTab.general.languageOptions.system,
                         onTap: () => vm.onTapLanguage(context),
+                      ),
+                      _SettingsEntry(
+                        label: 'Chat notification',
+                        child: CustomDropdownButton<ChatNotificationMode>(
+                          value: vm.settings.chatNotificationMode,
+                          items: ChatNotificationMode.values.map((mode) {
+                            return DropdownMenuItem(
+                              value: mode,
+                              alignment: Alignment.center,
+                              child: Text(mode.humanName),
+                            );
+                          }).toList(),
+                          onChanged: (mode) async {
+                            await ref.notifier(settingsProvider).setChatNotificationMode(mode);
+                          },
+                        ),
                       ),
                       if (checkPlatformIsDesktop()) ...[
                         /// Wayland does window position handling, so there's no need for it. See [https://github.com/localsend/localsend/issues/544]
@@ -765,6 +782,15 @@ extension on ColorMode {
       ColorMode.localsend => t.appName,
       ColorMode.oled => t.settingsTab.general.colorOptions.oled,
       ColorMode.yaru => 'Yaru',
+    };
+  }
+}
+
+extension on ChatNotificationMode {
+  String get humanName {
+    return switch (this) {
+      ChatNotificationMode.dialog => 'Popup',
+      ChatNotificationMode.system => 'System',
     };
   }
 }

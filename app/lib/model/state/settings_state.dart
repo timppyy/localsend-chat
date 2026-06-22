@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/persistence/color_mode.dart';
 import 'package:localsend_app/model/send_mode.dart';
+import 'package:localsend_app/model/state/chat_notification_mode.dart';
 
 part 'settings_state.mapper.dart';
 
@@ -34,6 +35,7 @@ class SettingsState with SettingsStateMappable {
   final String? deviceModel;
   final bool shareViaLinkAutoAccept;
   final int discoveryTimeout;
+  final ChatNotificationMode chatNotificationMode;
   final bool advancedSettings;
 
   const SettingsState({
@@ -62,6 +64,7 @@ class SettingsState with SettingsStateMappable {
     required this.deviceModel,
     required this.shareViaLinkAutoAccept,
     required this.discoveryTimeout,
+    required this.chatNotificationMode,
     required this.advancedSettings,
   });
 }

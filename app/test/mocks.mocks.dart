@@ -5,7 +5,7 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
 
-import 'package:common/model/device.dart' as _i15;
+import 'package:common/model/device.dart' as _i16;
 import 'package:common/model/stored_security_context.dart' as _i2;
 import 'package:flutter/material.dart' as _i11;
 import 'package:localsend_app/gen/strings.g.dart' as _i13;
@@ -17,11 +17,12 @@ import 'package:localsend_app/model/persistence/color_mode.dart' as _i12;
 import 'package:localsend_app/model/persistence/favorite_device.dart' as _i6;
 import 'package:localsend_app/model/persistence/receive_history_entry.dart'
     as _i5;
-import 'package:localsend_app/model/send_mode.dart' as _i14;
+import 'package:localsend_app/model/send_mode.dart' as _i15;
+import 'package:localsend_app/model/state/chat_notification_mode.dart' as _i14;
 import 'package:localsend_app/provider/persistence_provider.dart' as _i3;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i10;
-import 'package:shared_preferences/shared_preferences.dart' as _i16;
+import 'package:shared_preferences/shared_preferences.dart' as _i17;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -359,6 +360,24 @@ class MockPersistenceService extends _i1.Mock
           as _i4.Future<void>);
 
   @override
+  _i14.ChatNotificationMode getChatNotificationMode() =>
+      (super.noSuchMethod(
+            Invocation.method(#getChatNotificationMode, []),
+            returnValue: _i14.ChatNotificationMode.dialog,
+            returnValueForMissingStub: _i14.ChatNotificationMode.dialog,
+          )
+          as _i14.ChatNotificationMode);
+
+  @override
+  _i4.Future<void> setChatNotificationMode(_i14.ChatNotificationMode? mode) =>
+      (super.noSuchMethod(
+            Invocation.method(#setChatNotificationMode, [mode]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
   String getMulticastGroup() =>
       (super.noSuchMethod(
             Invocation.method(#getMulticastGroup, []),
@@ -547,16 +566,16 @@ class MockPersistenceService extends _i1.Mock
           as _i4.Future<void>);
 
   @override
-  _i14.SendMode getSendMode() =>
+  _i15.SendMode getSendMode() =>
       (super.noSuchMethod(
             Invocation.method(#getSendMode, []),
-            returnValue: _i14.SendMode.single,
-            returnValueForMissingStub: _i14.SendMode.single,
+            returnValue: _i15.SendMode.single,
+            returnValueForMissingStub: _i15.SendMode.single,
           )
-          as _i14.SendMode);
+          as _i15.SendMode);
 
   @override
-  _i4.Future<void> setSendMode(_i14.SendMode? mode) =>
+  _i4.Future<void> setSendMode(_i15.SendMode? mode) =>
       (super.noSuchMethod(
             Invocation.method(#setSendMode, [mode]),
             returnValue: _i4.Future<void>.value(),
@@ -637,7 +656,7 @@ class MockPersistenceService extends _i1.Mock
           as bool);
 
   @override
-  _i4.Future<void> setDeviceType(_i15.DeviceType? deviceType) =>
+  _i4.Future<void> setDeviceType(_i16.DeviceType? deviceType) =>
       (super.noSuchMethod(
             Invocation.method(#setDeviceType, [deviceType]),
             returnValue: _i4.Future<void>.value(),
@@ -667,7 +686,7 @@ class MockPersistenceService extends _i1.Mock
 /// A class which mocks [SharedPreferences].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockSharedPreferences extends _i1.Mock implements _i16.SharedPreferences {
+class MockSharedPreferences extends _i1.Mock implements _i17.SharedPreferences {
   @override
   Set<String> getKeys() =>
       (super.noSuchMethod(

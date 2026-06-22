@@ -209,6 +209,16 @@ class _ChatDetail extends StatelessWidget {
         _ChatHeader(
           title: title,
           device: vm.selectedDevice,
+          onClearConversation: () async {
+            final fingerprint = vm.selectedFingerprint;
+            if (fingerprint == null) {
+              return;
+            }
+            final confirmed = await _confirmClearConversation(context, title);
+            if (confirmed == true) {
+              await vm.onClearConversation(fingerprint);
+            }
+          },
         ),
         Expanded(
           child: vm.messages.isEmpty
@@ -291,10 +301,12 @@ class _ChatDetail extends StatelessWidget {
 class _ChatHeader extends StatelessWidget {
   final String title;
   final Device? device;
+  final Future<void> Function() onClearConversation;
 
   const _ChatHeader({
     required this.title,
     required this.device,
+    required this.onClearConversation,
   });
 
   @override
@@ -323,10 +335,39 @@ class _ChatHeader extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Clear chat history',
+            onPressed: () async {
+              await onClearConversation();
+            },
+            icon: const Icon(Icons.delete_sweep_outlined),
+          ),
         ],
       ),
     );
   }
+}
+
+Future<bool?> _confirmClearConversation(BuildContext context, String title) async {
+  return await showDialog<bool>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Clear chat history?'),
+        content: Text('Clear local chat history with $title? This will not delete anything on the other device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _MessageBubble extends StatelessWidget {

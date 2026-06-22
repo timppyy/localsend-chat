@@ -142,6 +142,13 @@ class SettingsStateMapper extends ClassMapperBase<SettingsState> {
     'discoveryTimeout',
     _$discoveryTimeout,
   );
+  static ChatNotificationMode _$chatNotificationMode(SettingsState v) =>
+      v.chatNotificationMode;
+  static const Field<SettingsState, ChatNotificationMode>
+  _f$chatNotificationMode = Field(
+    'chatNotificationMode',
+    _$chatNotificationMode,
+  );
   static bool _$advancedSettings(SettingsState v) => v.advancedSettings;
   static const Field<SettingsState, bool> _f$advancedSettings = Field(
     'advancedSettings',
@@ -175,6 +182,7 @@ class SettingsStateMapper extends ClassMapperBase<SettingsState> {
     #deviceModel: _f$deviceModel,
     #shareViaLinkAutoAccept: _f$shareViaLinkAutoAccept,
     #discoveryTimeout: _f$discoveryTimeout,
+    #chatNotificationMode: _f$chatNotificationMode,
     #advancedSettings: _f$advancedSettings,
   };
 
@@ -205,6 +213,7 @@ class SettingsStateMapper extends ClassMapperBase<SettingsState> {
       deviceModel: data.dec(_f$deviceModel),
       shareViaLinkAutoAccept: data.dec(_f$shareViaLinkAutoAccept),
       discoveryTimeout: data.dec(_f$discoveryTimeout),
+      chatNotificationMode: data.dec(_f$chatNotificationMode),
       advancedSettings: data.dec(_f$advancedSettings),
     );
   }
@@ -301,6 +310,7 @@ abstract class SettingsStateCopyWith<$R, $In extends SettingsState, $Out>
     String? deviceModel,
     bool? shareViaLinkAutoAccept,
     int? discoveryTimeout,
+    ChatNotificationMode? chatNotificationMode,
     bool? advancedSettings,
   });
   SettingsStateCopyWith<$R2, $In, $Out2> $chain<$R2, $Out2>(Then<$Out2, $R2> t);
@@ -359,6 +369,7 @@ class _SettingsStateCopyWithImpl<$R, $Out>
     Object? deviceModel = $none,
     bool? shareViaLinkAutoAccept,
     int? discoveryTimeout,
+    ChatNotificationMode? chatNotificationMode,
     bool? advancedSettings,
   }) => $apply(
     FieldCopyWithData({
@@ -390,6 +401,8 @@ class _SettingsStateCopyWithImpl<$R, $Out>
       if (shareViaLinkAutoAccept != null)
         #shareViaLinkAutoAccept: shareViaLinkAutoAccept,
       if (discoveryTimeout != null) #discoveryTimeout: discoveryTimeout,
+      if (chatNotificationMode != null)
+        #chatNotificationMode: chatNotificationMode,
       if (advancedSettings != null) #advancedSettings: advancedSettings,
     }),
   );
@@ -429,6 +442,10 @@ class _SettingsStateCopyWithImpl<$R, $Out>
       or: $value.shareViaLinkAutoAccept,
     ),
     discoveryTimeout: data.get(#discoveryTimeout, or: $value.discoveryTimeout),
+    chatNotificationMode: data.get(
+      #chatNotificationMode,
+      or: $value.chatNotificationMode,
+    ),
     advancedSettings: data.get(#advancedSettings, or: $value.advancedSettings),
   );
 

@@ -39,6 +39,9 @@ class ChatComposer extends StatelessWidget {
                 unawaited(onSend());
               }
             },
+            SingleActivator(LogicalKeyboardKey.keyV, control: true): () {
+              unawaited(onPasteFromClipboard());
+            },
           },
           child: Container(
             padding: const EdgeInsets.all(12),

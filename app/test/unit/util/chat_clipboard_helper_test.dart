@@ -12,6 +12,7 @@ void main() {
       readFiles: () async => const [],
       readText: () async => 'text fallback',
       detectImageType: (_) => 'png',
+      persistImage: ({required fileName, required bytes}) async => r'C:\Temp\LocalSendChat\clipboard_2026-06-21_23-39.png',
       now: () => DateTime(2026, 6, 21, 23, 39),
     );
 
@@ -20,6 +21,26 @@ void main() {
     expect(result.files.single.name, 'clipboard_2026-06-21_23-39.png');
     expect(result.files.single.fileType, FileType.image);
     expect(result.files.single.thumbnail, isNotNull);
+  });
+
+  test('persists clipboard image bytes so sent image messages can be previewed later', () async {
+    final imageBytes = Uint8List.fromList([1, 2, 3]);
+    final result = await readChatClipboard(
+      readImage: () async => imageBytes,
+      readFiles: () async => const [],
+      readText: () async => 'text fallback',
+      detectImageType: (_) => 'png',
+      persistImage: ({required fileName, required bytes}) async {
+        expect(fileName, 'clipboard_2026-06-21_23-39.png');
+        expect(bytes, imageBytes);
+        return r'C:\Temp\LocalSendChat\clipboard_2026-06-21_23-39.png';
+      },
+      now: () => DateTime(2026, 6, 21, 23, 39),
+    );
+
+    expect(result.files.single.path, r'C:\Temp\LocalSendChat\clipboard_2026-06-21_23-39.png');
+    expect(result.files.single.bytes, isNull);
+    expect(result.files.single.thumbnail, imageBytes);
   });
 
   test('reads clipboard files before clipboard text', () async {

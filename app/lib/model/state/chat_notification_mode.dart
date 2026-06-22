@@ -1,0 +1,4 @@
+enum ChatNotificationMode {
+  dialog,
+  system,
+}

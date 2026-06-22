@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:common/model/file_type.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,8 @@ import 'package:localsend_app/util/file_path_helper.dart';
 import 'package:localsend_app/util/image_converter.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:uri_content/uri_content.dart';
 
 final _uriContent = UriContent();
@@ -30,6 +34,11 @@ typedef ChatImageTypeDetector = String Function(Uint8List bytes);
 typedef ChatBmpConverter = Future<Uint8List> Function(Uint8List bytes);
 typedef ChatClipboardFileConverter = Future<CrossFile> Function(String path);
 typedef ChatClock = DateTime Function();
+typedef ChatClipboardImagePersister =
+    Future<String> Function({
+      required String fileName,
+      required Uint8List bytes,
+    });
 
 Future<ChatClipboardPayload> readChatClipboard({
   ChatClipboardImageReader? readImage,
@@ -38,6 +47,7 @@ Future<ChatClipboardPayload> readChatClipboard({
   ChatImageTypeDetector detectImageType = determineImageType,
   ChatBmpConverter convertBmp = convertBmpToPng,
   ChatClipboardFileConverter convertFilePath = _convertClipboardFilePath,
+  ChatClipboardImagePersister persistImage = _persistClipboardImage,
   ChatClock? now,
 }) async {
   final image = await (readImage ?? _readClipboardImage)();
@@ -56,6 +66,7 @@ Future<ChatClipboardPayload> readChatClipboard({
     final timestamp = now?.call() ?? DateTime.now();
     final fileName =
         'clipboard_${timestamp.year}-${timestamp.month.twoDigitString}-${timestamp.day.twoDigitString}_${timestamp.hour.twoDigitString}-${timestamp.minute.twoDigitString}.$imageType';
+    final filePath = await persistImage(fileName: fileName, bytes: imageBytes);
     return ChatClipboardPayload(
       text: null,
       files: [
@@ -65,8 +76,8 @@ Future<ChatClipboardPayload> readChatClipboard({
           size: imageBytes.length,
           thumbnail: imageBytes,
           asset: null,
-          path: null,
-          bytes: imageBytes,
+          path: filePath,
+          bytes: null,
           lastModified: null,
           lastAccessed: null,
         ),
@@ -90,6 +101,18 @@ Future<ChatClipboardPayload> readChatClipboard({
   }
 
   return const ChatClipboardPayload(text: null, files: []);
+}
+
+Future<String> _persistClipboardImage({
+  required String fileName,
+  required Uint8List bytes,
+}) async {
+  final baseDir = await getTemporaryDirectory();
+  final directory = Directory(path.join(baseDir.path, 'localsend-chat', 'clipboard'));
+  await directory.create(recursive: true);
+  final file = File(path.join(directory.path, fileName));
+  await file.writeAsBytes(bytes, flush: true);
+  return file.path;
 }
 
 Future<Uint8List?> _readClipboardImage() async {
